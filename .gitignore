@@ -1,0 +1,19 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Output files
+April_2026/
+July_2026/
+
+# Media
+*.mp4
+*.mkv
+*.avi
+*.parquet
+
+# VS Code settings
+.vscode/
