@@ -47,7 +47,7 @@ def load_pair_from_parquet(pq_path, pair):
     df = table.to_pandas()
 
     # reduce memory
-    df = df.astype('float32')
+    df = df.fillna(0).astype('float32') #added fillna(0) to avoid NaN in the features (otherwise the model will produce NaN predictions)
 
     return df
 
@@ -138,6 +138,7 @@ def compute_features(df, PX_PER_MM=0.59):
     pursuit_2 = safe_cos(dx2, dy2, rx21, ry21)
 
     # --- FINAL FEATURE DF (17 columns) ---
+    # COLUMNS MUST FOLLOW THIS ORDER
     df_feats = pd.DataFrame({
         "Centroid_distance": centroid_dist,
         "Nose_to_nose_distance": nose_dist,
@@ -147,15 +148,15 @@ def compute_features(df, PX_PER_MM=0.59):
         "M2_Nose_to_M1_lat_right": m2_to_m1_R,
         "Movement_mouse_1_centroid": move1,
         "Movement_mouse_2_centroid": move2,
-        "pursuit_cos_1": pursuit_1,
-        "pursuit_cos_2": pursuit_2,
-        "rel_speed": rel_speed,
-        "nose1_to_body2": nose1_body2,
-        "nose2_to_body1": nose2_body1,
         "Center_1_x": M1_cent_x,
         "Center_1_y": M1_cent_y,
         "Center_2_x": M2_cent_x,
-        "Center_2_y": M2_cent_y
+        "Center_2_y": M2_cent_y,
+        "rel_speed": rel_speed,
+        "nose1_to_body2": nose1_body2,
+        "nose2_to_body1": nose2_body1,
+        "pursuit_cos_1": pursuit_1,
+        "pursuit_cos_2": pursuit_2
     })
 
     del df
