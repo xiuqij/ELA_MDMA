@@ -57,8 +57,8 @@ def process_all_videos_ffmpeg(input_folder, output_folder, crop_coords, sb_label
     print("\nCompleted.")
 
 #%%
-INPUT_PATH = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\recordings\female_P35"
-OUTPUT_PATH = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\cropped_videos\female_P35"
+INPUT_PATH = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\recordings\male_P42"
+OUTPUT_PATH = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\cropped_videos\male_P42"
 SAVED_COORDS = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\crop_coords_july.pickle"
 with open(SAVED_COORDS,'rb') as f:
     dict_coords = pickle.load(f)

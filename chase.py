@@ -14,7 +14,7 @@ MODEL_PATH = r"L:\Lopez Laboratory - NEURO\Xiuqi\Xmas training 2025\models\16012
 
 WINDOW_SIZE = 20
 WINDOW_STEP = 5
-PROB_THR = 0.85
+PROB_THR = 0.9
 MAX_GAP_FRAMES = 3
 MARGIN = 0.1
 
