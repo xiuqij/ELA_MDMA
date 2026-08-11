@@ -17,6 +17,7 @@ def main(): #multiprocessing
         print(f'Start processing {exp}')
         start = time.time()
         for t in tp:
+            print(t)
             parquet_folder = f"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\parquet\{exp}\{t}"
             output_folder = f"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\proximity\{exp}\{t}"
 
@@ -38,6 +39,9 @@ def main(): #multiprocessing
             for filepath in glob.glob(f'{parquet_folder}/*.parquet'):
                 files_to_process.append((filepath,parquet_folder,pairs,thres_time,thres_gap,extension_area_px,px_to_mm))
 
+            # checkpoint
+            print(f"Found {len(files_to_process)} parquet files")
+            
             # set multiprocessing
             num_processes=cpu_count()//3 #num of cpu cores
 
@@ -57,12 +61,14 @@ def main(): #multiprocessing
                     composite_dfs[file][key].extend(dfs)
 
             # save unfiltered result
+            print("saving results (unfiltered).")
             file_dict=os.path.join(output_folder,f'proximity_dict_{exp}_{t}.pickle')
             with open(file_dict, "wb") as file:
                 pickle.dump(composite_dfs, file)
                 file.close()
 
             #exclude chases and recalculate bouts
+            print("saving results (filtered out chases).")
             dict_predicted_no_chases=utils.exclude_chases(chase_df,composite_dfs,thres_time,thres_gap)
             file_dict_no_chases=os.path.join(output_folder,f'proximity_dict_{exp}_no_chases.pickle')
             with open(file_dict_no_chases, "wb") as file:

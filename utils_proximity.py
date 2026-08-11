@@ -165,7 +165,7 @@ def processer(info):
     intersect_dict={}
     bouts_dict={}
     areas_dict={}
-
+    print(f"Starting {parquet_file}")
 
     pq_file_path =parquet_file
     df=pd.read_parquet(pq_file_path, engine='pyarrow')
@@ -176,8 +176,8 @@ def processer(info):
 
     for pair in sorted(list(pairs.keys())):
         cols_pair=pairs[pair]
-        df2=df.copy()
-        df2=df2.iloc[:,cols_pair]
+        #df2=df.copy()
+        df2=df.iloc[:,cols_pair]
         df2=remove_bps(df2)
         intersect_dict[pair]={}
         bouts_dict[pair]={}
@@ -206,7 +206,8 @@ def processer(info):
         #bouts_dict[pair].append(utils.all_frames_from_bouts(bouts_dict[pair][0]))
         areas_dict[pair]=find_bouts(areas_list,treshold_time,treshold_gap)
         #areas_dict[pair][2]=utils.all_frames_from_bouts(areas_dict[pair][1])
-
+    
+    print(f"Finished {parquet_file}")
     return (bouts_dict,file)
 
 
@@ -234,4 +235,4 @@ def exclude_chases(df_chase, df_prox, thres_time, thres_gap):
             result_bouts=find_bouts(result,thres_time,thres_gap)
             updated_proximity[file][pair][0]=result_bouts
             updated_proximity[file][pair][1]=result
-    return(updated_proximity)
+    return updated_proximity
