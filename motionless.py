@@ -75,34 +75,45 @@ def process_file(file_path):
         all_events_speeding.append(speeding_events_df)
 
     return (all_events, all_events_speeding)
+
+#%%
+# paths
+parquet_path = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\parquet"
+output_path = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\immobility"
+
+exp = 'male_P35'
+time_points = ['baseline','MDMA']
+parquet_path_exp = os.path.join(parquet_path, exp)
+output_path_exp = os.path.join(output_path, exp)
 #%%
 def main():
     #start_time = time.time()
     #warnings.filterwarnings("ignore", category=DeprecationWarning)
+    for t in time_points:
+        print(t)
+        main_folder  = os.path.join(parquet_path_exp,t)
+        files_to_process = glob.glob(f"{main_folder}/*.parquet")
+        print(len(files_to_process))
+        batch_size = 10 # Adjust this based on your memory constraints
+        full_event_data = pd.DataFrame()
+        full_event_data_speeding = pd.DataFrame()
+        
+        for i in range(0, len(files_to_process), batch_size):
+            batch_files = files_to_process[i:i + batch_size]
+            print(f"Processing batch {i // batch_size + 1} of {len(files_to_process) // batch_size + 1}")
 
-    main_folder = r""   # main parquet folder
-    files_to_process = glob.glob(f"{main_folder}/**/*.parquet", recursive=True) #allows to take pq files of all subfolders of main folder
-    #files_to_process = glob.glob(f"{main_folder}/*.parquet")
+            with Pool() as pool:
+                results = pool.map(process_file, batch_files)
 
-
-    batch_size = 20 # Adjust this based on your memory constraints
-
-
-    for i in range(0, len(files_to_process), batch_size):
-        batch_files = files_to_process[i:i + batch_size]
-        print(f"Processing batch {i // batch_size + 1} of {len(files_to_process) // batch_size + 1}")
-
-        with Pool() as pool:
-            results = pool.map(process_file, batch_files)
-
-        for events_pairs in results:
-            for pair_df in events_pairs[0]:
-                full_event_data = pd.concat((full_event_data, pair_df), ignore_index=True)
-            for pair_df in events_pairs[1]:
-                full_event_data_speeding = pd.concat((full_event_data_speeding, pair_df), ignore_index=True)
-
-    full_event_data.to_csv(r"")
-    full_event_data_speeding.to_csv("")
+            for events_pairs in results:
+                for pair_df in events_pairs[0]:
+                    full_event_data = pd.concat((full_event_data, pair_df), ignore_index=True)
+                for pair_df in events_pairs[1]:
+                    full_event_data_speeding = pd.concat((full_event_data_speeding, pair_df), ignore_index=True)
+        print("saving results...")
+        os.makedirs(os.path.join(output_path_exp, t), exist_ok=True)
+        full_event_data.to_csv(os.path.join(output_path_exp, t, 'motionless_events.csv'), index=False)
+        full_event_data_speeding.to_csv(os.path.join(output_path_exp, t, 'speeding_events.csv'), index=False)
 if __name__ == '__main__':
     set_start_method('spawn')  # Set the start method to 'spawn'
     main()
