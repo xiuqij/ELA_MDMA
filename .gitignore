@@ -5,9 +5,10 @@ __pycache__/
 # Jupyter notebooks checkpoints
 .ipynb_checkpoints/
 
-# Output files
+# Folders
 April_2026/
 July_2026/
+Social_metrics-main/
 
 # Media
 *.mp4

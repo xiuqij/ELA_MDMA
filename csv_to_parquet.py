@@ -15,12 +15,13 @@ def get_csv_files(folder):
     return csv_files
 
 
-#%% Define input and output folders
-video_path = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\cropped_videos"
-parquet_path = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\parquet"
 
-# %% Run conversion batch1
-exps = ["male_P35","female_P42"]
+#%% Define input and output folders
+video_path = "/Volumes/labs/Lopez Laboratory - NEURO/Xiuqi/ELA_MDMA/July_2026/cropped_videos"
+parquet_path = "/Volumes/labs/Lopez Laboratory - NEURO/Xiuqi/ELA_MDMA/July_2026/parquet"
+
+# %% 
+exps = ["female_P35"]
 for exp in exps:
     print(f'Processing folder: {exp}\n')
     input_path = os.path.join(video_path,exp)
