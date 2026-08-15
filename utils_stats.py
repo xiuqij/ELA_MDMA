@@ -66,6 +66,64 @@ def split_events_by_hour(df, fps=25):
 
     return pd.DataFrame(rows)
 
+def split_events_by_hour_with_frame(df,fps=25):
+    
+    rows = []
+
+    for r in df.itertuples():
+
+        current_start = r.event_start
+        final_end = r.event_end
+
+        # Original frame boundaries
+        current_start_frame = r.start_frame
+        final_end_frame = r.end_frame
+
+        while current_start < final_end:
+
+            next_hour = (
+                current_start.replace(
+                    minute=0,
+                    second=0,
+                    microsecond=0
+                )
+                + pd.Timedelta(hours=1)
+            )
+
+            segment_end = min(final_end, next_hour)
+
+            # Number of frames from current timestamp to segment end
+            frames_to_boundary = round(
+                (segment_end - current_start).total_seconds() * fps
+            )
+
+            segment_start_frame = current_start_frame
+            segment_end_frame = min(
+                current_start_frame + frames_to_boundary,
+                final_end_frame
+            )
+
+            rows.append({
+                "mouse": r.mouse,
+                "video": r.video,
+                "date": r.date,
+                "box": r.box,
+
+                "event_start": current_start,
+                "event_end": segment_end,
+
+                "start_frame": segment_start_frame,
+                "end_frame": segment_end_frame,
+
+                "duration_f": segment_end_frame - segment_start_frame
+            })
+
+            # Move forward
+            current_start_frame = segment_end_frame
+            current_start = segment_end
+
+    return pd.DataFrame(rows)
+
 def add_time_labels(df): 
     '''ZT0=lights on, ZT12=lights off'''
     #df = df.copy() 
