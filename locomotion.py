@@ -84,6 +84,7 @@ if __name__ == '__main__':
         for t in time_points:
             pickle_path = os.path.join(output_path, exp, t, 'locomotion.pickle')
             raw_dict = pd.read_pickle(pickle_path)
+            locomotion_dfs = []
             for k,v in raw_dict.items():
                 locomotion_df = v['locomotion']
                 if locomotion_df.empty:
@@ -93,4 +94,5 @@ if __name__ == '__main__':
                 locomotion_df['date'] = k.split("_")[0]
                 locomotion_df['timestamp'] = k.split("_")[1]
                 locomotion_df= locomotion_df[['video','box','mouse','date','timestamp','distance', 'speed', 'time_in_seconds', 'angular_velocity','acceleration']]
-                locomotion_df.to_csv(os.path.join(output_path,exp,t,'locomotion.csv'),index=False)
+                locomotion_dfs.append(locomotion_df)
+            pd.concat(locomotion_dfs).to_csv(os.path.join(locomotion_path,exp,t,'locomotion.csv'),index=False)
