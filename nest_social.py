@@ -102,6 +102,53 @@ def compute_sociability_weighted(df_4h):
 
     return pd.DataFrame(results)
 
+def regroup_timebin(df,resolution):
+    '''re-group the output into different resolution (1,2,3,4,6,12-hour timebins).'''
+    group_base = ["date", "box", "mouse","ZT_hour","video"]
+    df_res = df.copy()
+
+    # create numeric timebin for sorting; e.g., 6,12,18,24 for 6h resolution
+    df_res['time_bin'] = (
+        ((df_res['ZT_hour'] // resolution) + 1) * resolution
+    )
+
+    # create readable time window for plotting
+    df_res['time_window'] = (
+        (df_res['time_bin'] - resolution).astype(int).astype(str)
+        + "-"
+        + (df_res['time_bin']).astype(int).astype(str)
+    )
+
+    # aggregate raw numerators and denominators
+    group_cols = group_base + ['time_bin','time_window']
+
+    agg = (
+        df_res.groupby(group_cols, as_index= False).agg({
+            "nest_frames":"sum",
+            "weighted_sum": "sum",
+            "alone_sum": "sum"
+        })
+    )
+
+    # calculate final metrics
+    mask = agg["nest_frames"] > 0
+    agg["weighted_co_occupancy"] = 0.0
+    agg["alone_fraction"] = 0.0
+
+    agg.loc[mask,"weighted_co_occupancy"] = (
+        agg.loc[mask, "weighted_sum"]/agg.loc[mask, "nest_frames"]
+    )
+
+    agg.loc[mask,"alone_fraction"] = (
+        agg.loc[mask, "alone_sum"]/agg.loc[mask, "nest_frames"]
+    )
+
+    # sort
+    agg = agg.sort_values(
+        group_base + ['time_bin']
+    )
+
+    return agg
 # paths
 nest_path = r'L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\nest'
 output_path = r'L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\nest_social'
@@ -114,9 +161,17 @@ for exp in exps:
         print(t)
         nest_csv_path = os.path.join(nest_path,exp,t,'nest_events.csv') #4h result
         nest_df_4h = pd.read_csv(nest_csv_path)
+        # 1-hour data
         nest_social_df = compute_sociability_weighted(nest_df_4h)
         print("saving...")
         os.makedirs(os.path.join(output_path,exp,t),exist_ok= True)
         output_csv_path = os.path.join(output_path, exp, t, 'nest_social.csv')
         nest_social_df.to_csv(output_csv_path, index=False)
-        print("saved.")
+        print("saved raw data.")
+
+        # rebin into different resolutions
+        resolutions = [1,2,3,4,6,12]
+        for res in resolutions:
+            df_res = regroup_timebin(nest_social_df,resolution=res)
+            df_res.to_csv(os.path.join(output_path,exp,t,f'nest_social_{res}h.csv'),index=False)
+            print(f"saved {res}h data.")
