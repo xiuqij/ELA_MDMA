@@ -11,8 +11,8 @@ roi_helper = EasyROI(verbose=True)
 # %% Create list of videos to draw
 
 # [change here] folder path 
-sample_path= r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\samples\samples_ROI"
-EXP = 'male_P35'
+sample_path= r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\samples\samples_ROI"
+EXP = 'male_P42'
 videos_path = os.path.join(sample_path,EXP)
 # check the videos in the folder
 videos = [f for f in os.listdir(videos_path)]
@@ -20,7 +20,7 @@ videos = [f for f in os.listdir(videos_path)]
 videos_to_draw = [os.path.join(videos_path, video) for video in videos]
 print(videos_to_draw)
 #check if it's the right number of videos
-print(len(videos_to_draw))  #4
+print(len(videos_to_draw))  #8
 
 # %% Create ROI for enrichment and feeding objects
 def draw_ROIs(video_path):
@@ -72,7 +72,7 @@ for video in videos_to_draw:
 
 #%% Store ROIs to a pickle file for later use
 #[change here] ROIs work folder
-ROI_folder = 'L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\ROIs'
+ROI_folder = 'L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\ROIs'
 #[change here] Name the ROI file as the video group e.g., roi_ctrl_after_stress2.pickle
 roi_file = f'{EXP}.pickle'
 # %% Store the ROI dict in a .pickle file

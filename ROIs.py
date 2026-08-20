@@ -9,10 +9,10 @@ import utils_ROIs as utils
 #importlib.reload(utils)
 
 #%%
-PARQUET_FOLDER = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\parquet" 
-ROI_FOLDER = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\ROIs"
-exp_list = ['male_P35','female_P42']
-sets = ['baseline','MDMA_acute','MDMA']
+PARQUET_FOLDER = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\parquet" 
+ROI_FOLDER = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\ROIs"
+exp_list = ['female_P35','male_P42']
+sets = ['baseline','MDMA']
 #%%
 def main():
     # Start the timer
@@ -24,7 +24,7 @@ def main():
         os.makedirs(os.path.join(ROI_FOLDER,exp),exist_ok = True)
         for s in sets:
             start_time_set = time.time()
-            print(f'Processing... {s}\n')
+            print(f'Processing... {s}')
             results={}
             arenas_roi = {}
             # Load the data
@@ -51,7 +51,8 @@ def main():
 
             with Pool(processes=num_processes) as pool:
                 results= pool.map(utils.process_file,files_to_process)    #chunksize = len(files_to_process)//num_processes
-            
+
+            print("Processed. Saving results...")
             # Initialize a dictionary to hold lists of DataFrames for each key
             composite_dfs = {}
 
@@ -68,13 +69,14 @@ def main():
                 composite_df.to_csv(os.path.join(csv_path,f'{key}_events.csv'), index=False)
 
             end_time_set = time.time()
+            print("Saved.")
             # Calculate the difference
-            elapsed_time = (end_time_set - start_time_set) / 3600
-            print(f"Folder {s} completed in {elapsed_time} hours.")
+            elapsed_time = (end_time_set - start_time_set) / 60
+            print(f"Folder {s} completed in {elapsed_time} mins.")
         end_time_exp = time.time()
-        print(f"Folder {exp} completed in {(end_time_exp - start_time_exp)/3600} hours.")
+        print(f"Folder {exp} completed in {(end_time_exp - start_time_exp)/60} mins.")
     end_time = time.time()
-    print(f"All completed in {(end_time - start_time)/3600} hours.")
+    print(f"All completed in {(end_time - start_time)/60} mins.\n")
 #%%
 if __name__ == '__main__':
     set_start_method('spawn',force=True)  # Set the start method to 'spawn'
