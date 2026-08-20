@@ -35,7 +35,7 @@ def compute_roi_sociability(df_4h, roi_name):
     df = utils.add_time_labels(df)
 
     results = []
-    group_cols = ["date", "box", "ZT_hour", "video"]
+    group_cols = ["ZT_day", "box", "ZT_hour"]
 
     for group_keys, group in df.groupby(group_cols):
         if group.empty:
@@ -69,10 +69,9 @@ def compute_roi_sociability(df_4h, roi_name):
             roi_frames = int(focal.sum())
 
             result = {
-                "date": group_keys[0],
+                "ZT_day": group_keys[0],
                 "box": group_keys[1],
                 "ZT_hour": group_keys[2],
-                "video": group_keys[3],
                 "mouse": mouse,
 
                 f"{roi_name}_frames": roi_frames,
@@ -121,7 +120,7 @@ def compute_roi_sociability(df_4h, roi_name):
 
 def regroup_timebin(df,resolution):
     '''re-group the output into different resolution (1,2,3,4,6,12-hour timebins).'''
-    group_base = ["date", "box", "mouse","ZT_hour","video"]
+    group_base = ["ZT_day", "box", "mouse"]
     df_res = df.copy()
 
     # create numeric timebin for sorting; e.g., 6,12,18,24 for 6h resolution
@@ -248,7 +247,7 @@ for exp in exps:
         for df in roi_results[1:]:
             df_social = pd.merge(
                 df_social,df,
-                on=["date","box","ZT_hour","video","mouse"],
+                on=["ZT_day","box","ZT_hour","mouse"],
                 how="outer"
                 )
         # save raw data

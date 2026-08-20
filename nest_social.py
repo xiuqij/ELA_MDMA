@@ -18,7 +18,7 @@ def compute_sociability_weighted(df_4h):
     #cols (nest_events_1h):'video','mouse','box','duration_f','event_start', 'event_end', 'date','CT_hour','ZT_day','ZT_hour','phase','start_frame','end_frame'
     
     results = []
-    group_cols = ["date", "box", "ZT_hour","video"]
+    group_cols = ["ZT_day", "box", "ZT_hour"]
 
     for group_keys, group in df.groupby(group_cols):
 
@@ -56,11 +56,10 @@ def compute_sociability_weighted(df_4h):
             if nest_frames == 0:
 
                 results.append({
-                    "date": group_keys[0],
+                    "ZT_day": group_keys[0],
                     "box": group_keys[1],
                     "ZT_hour": group_keys[2],
                     "mouse": mouse,
-                    "video": group_keys[3],
 
                     # SAFE DEFAULTS
                     "nest_frames": 0,
@@ -88,11 +87,10 @@ def compute_sociability_weighted(df_4h):
             alone_sum = int((coocc == 0).sum())
 
             results.append({
-                "date": group_keys[0],
+                "ZT_day": group_keys[0],
                 "box": group_keys[1],
                 "ZT_hour": group_keys[2],
                 "mouse": mouse,
-                "video": group_keys[3],
 
                 # denominators + numerators. Needed this way to then aggregate correctly by timebin
                 "nest_frames": nest_frames,
@@ -104,7 +102,7 @@ def compute_sociability_weighted(df_4h):
 
 def regroup_timebin(df,resolution):
     '''re-group the output into different resolution (1,2,3,4,6,12-hour timebins).'''
-    group_base = ["date", "box", "mouse","ZT_hour","video"]
+    group_base = ["ZT_day", "box", "mouse"]
     df_res = df.copy()
 
     # create numeric timebin for sorting; e.g., 6,12,18,24 for 6h resolution
@@ -150,9 +148,9 @@ def regroup_timebin(df,resolution):
 
     return agg
 # paths
-nest_path = r'L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\nest'
-output_path = r'L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\nest_social'
-exps = ['male_P35','female_P42']
+nest_path = r'L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\nest'
+output_path = r'L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\nest_social'
+exps = ['female_P35','male_P42']
 time_points = ['baseline','MDMA']
 
 for exp in exps:
