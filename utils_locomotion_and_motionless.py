@@ -27,7 +27,7 @@ def processer(info):
     for mouse in mice:
         mouse_nest_df=nest_df[nest_df['mouse']==mouse]
         nest_frames = [num for j in mouse_nest_df.index for num in range(mouse_nest_df.loc[j, 'start_frame'], mouse_nest_df.loc[j, 'end_frame'] + 1)]
-        nest_frames_mice[mouse]=nest_frames
+        nest_frames_mice[mouse]=set(nest_frames)
 
     df=pd.read_parquet(file_path,engine='pyarrow')
     col_names = [(item1+'_'+item2+'_'+ item3) for item1 in mice for item2 in body_part for item3 in coord]
@@ -44,13 +44,21 @@ def processer(info):
                 
             x_points = [f"{mouse}_{x}" for x in torso[0]] #proper columns for that mouse and bps
             y_points = [f"{mouse}_{y}" for y in torso[1]] #proper columns for that mouse and bps
-            x_values = df.loc[i, x_points]
-            y_values = df.loc[i, y_points]
+            #x_values = df.loc[i, x_points]
+            #y_values = df.loc[i, y_points]
+            #x_values = df.iloc[i][x_points]
+            #y_values = df.iloc[i][y_points]
+            
+            x_values = df.iloc[i, df.columns.get_indexer(x_points)]
+            y_values = df.iloc[i, df.columns.get_indexer(y_points)]
 
             centroid = calculate_centroid(x_values, y_values)
 
-            if np.isnan(centroid).any() & len(frame_indices)>5: #if the centroid is nan, and not in initial frames
-                centroid=np.mean(centroids[len(frame_indices)-5:len(frame_indices)-1],axis=0)  #centroid should be the mean of 5 previous centroids
+            if np.isnan(centroid).any():
+                if len(frame_indices)>5: #if the centroid is nan, and not in initial frames
+                    centroid = np.nanmean(centroids[-5:], axis=0)  #centroid should be the mean of 5 previous centroids
+                else:
+                    centroid = np.array([np.nan, np.nan])
             
             centroids.append(np.array(centroid))  # Convert tuple to numpy array
             frame_indices.append(i)     #keep track of the frames
