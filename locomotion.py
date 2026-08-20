@@ -17,11 +17,11 @@ fps = 25
 px_m=px_mm*1000
 
 # Paths
-parquet_path =r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\parquet"
-nest_path=r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\nest"  
-output_path=r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\locomotion"
+parquet_path =r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\parquet"
+nest_path=r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\nest"  
+output_path=r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\locomotion"
 
-exps = []
+exps = ['male_P42']
 time_points = ['baseline','MDMA']
 
 #%%
@@ -48,7 +48,8 @@ def main(): #multiprocessing
                 files_to_process.append((file_path,main_folder,file,nest_dict,mice,body_part,coord,torso,px_mm,px_m,fps))
             print(len(files_to_process))
             # multiprocessing
-            num_processes=cpu_count()//3 #num of cpu cores
+            num_processes=cpu_count()//4 #num of cpu cores
+            print(num_processes)
             with Pool(processes=num_processes) as pool:
                 results = pool.map(utils.processer, files_to_process)
 
@@ -69,6 +70,7 @@ def main(): #multiprocessing
             with open(file_dict, "wb") as file:
                 pickle.dump(composite_dfs, file)
                 file.close()
+            print("saved as pickle file.")
 
         #for item in results:
         #  dataframe=item[0]
@@ -79,6 +81,7 @@ if __name__ == '__main__':
     set_start_method('spawn',force=True)  # Set the start method to 'spawn'
     
     main()
+    
     # save as csv
     for exp in exps:
         for t in time_points:
@@ -95,4 +98,6 @@ if __name__ == '__main__':
                 locomotion_df['timestamp'] = k.split("_")[1]
                 locomotion_df= locomotion_df[['video','box','mouse','date','timestamp','distance', 'speed', 'time_in_seconds', 'angular_velocity','acceleration']]
                 locomotion_dfs.append(locomotion_df)
-            pd.concat(locomotion_dfs).to_csv(os.path.join(locomotion_path,exp,t,'locomotion.csv'),index=False)
+            pd.concat(locomotion_dfs).to_csv(os.path.join(output_path,exp,t,'locomotion.csv'),index=False)
+
+# %%
