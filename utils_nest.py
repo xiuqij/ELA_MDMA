@@ -86,10 +86,10 @@ def find_bouts(mask_df, mouse_col, mouse, thresholds):
 def find_nest_events(info):
     parquet_file,main_folder,mouse,body_part,coord,lik_treshold_dlc,threshold_nans,thresholds_dict,nest_nans,mask_cols,mice=info
 
-    print(f"START {os.path.basename(parquet_file)}", flush=True)
+    #print(f"START {os.path.basename(parquet_file)}", flush=True)
     pq_file_path =parquet_file
     df=pd.read_parquet(pq_file_path, engine='pyarrow')
-    print(f"LOADED {os.path.basename(parquet_file)}", flush=True)
+    #print(f"LOADED {os.path.basename(parquet_file)}", flush=True)
     
     file=os.path.basename(pq_file_path)
     file=os.path.splitext(file)[0] #2024-12-17_16-44-02_crop_green_corrected
@@ -126,6 +126,6 @@ def find_nest_events(info):
 
     nest_df=nest_df.reset_index(drop=True)  
     nest_df = nest_df[['video','mouse','start_frame', 'end_frame', 'duration','box','date','timestamp']]
-    print(f"DONE {os.path.basename(parquet_file)}", flush=True)
+    #print(f"DONE {os.path.basename(parquet_file)}", flush=True)
     return (nest_df,file)
 
