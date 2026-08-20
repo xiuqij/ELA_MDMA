@@ -4,11 +4,11 @@ import pandas as pd
 from joblib import Parallel, delayed
 import utils_chase as utils
 
-PARQUET_FOLDER = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\parquet"
-OUTPUT_FOLDER = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\chase"
+PARQUET_FOLDER = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\parquet"
+OUTPUT_FOLDER = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\chase"
 
-EXPS = ["female_P42","male_P35"]
-TPS = ["baseline","MDMA","MDMA_acute"]
+EXPS = ["female_P35","male_P42"]
+TPS = ["baseline","MDMA"]
 
 MODEL_PATH = r"L:\Lopez Laboratory - NEURO\Xiuqi\Xmas training 2025\models\16012026_AUG_F1_0.685_on_test_tresh0.9.joblib"
 
