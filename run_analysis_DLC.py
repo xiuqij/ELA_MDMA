@@ -3,7 +3,7 @@ import deeplabcut
 
 #%% Define paths for model and videos
 config_path=r"L:\Lopez Laboratory - NEURO\SB_Pilot\Sexy16\DLC\Sexy16Pilot-Sere-2025-03-10\config.yaml"  
-videos_path=r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\cropped_videos\female_P35"
+videos_path=r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\cropped_videos\male_P42"
 
 #%% analyze videos
 #output of this step is [videoname]DLC_resnet50_Sexy16PilotMar10shuffle9_180000_full.pickle and [videoname]DLC_resnet50_Sexy16PilotMar10shuffle9_180000_meta.pickle

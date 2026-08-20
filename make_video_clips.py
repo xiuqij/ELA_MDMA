@@ -72,32 +72,40 @@ def export_clips_single(events_df, video_path,path_dlc, video_export_path, fps=2
             out.write(frame)
         cap.release()
         out.release()
-'''
-females ['2026-04-11_19-30-20_crop_5','2026-04-11_19-30-20_crop_6','2026-04-11_19-30-20_crop_7','2026-04-11_19-30-20_crop_8',
-'2026-04-11_19-30-22_crop_1','2026-04-11_19-30-22_crop_2','2026-04-11_19-30-22_crop_3','2026-04-11_19-30-22_crop_4',
-'2026-04-12_03-30-23_crop_5','2026-04-12_03-30-23_crop_6','2026-04-12_03-30-23_crop_7','2026-04-12_03-30-23_crop_8',
-'2026-04-12_03-30-25_crop_1','2026-04-12_03-30-25_crop_2','2026-04-12_03-30-25_crop_3','2026-04-12_03-30-25_crop_4']
 
-males ['2026-04-04_19-26-02_crop_5','2026-04-04_19-26-02_crop_6','2026-04-04_19-26-02_crop_7','2026-04-04_19-26-02_crop_8',
-'2026-04-04_19-26-05_crop_1','2026-04-04_19-26-05_crop_2','2026-04-04_19-26-05_crop_3','2026-04-04_19-26-05_crop_4',
-'2026-04-04_23-22-05_crop_5','2026-04-04_23-22-05_crop_6','2026-04-04_23-22-05_crop_7','2026-04-04_23-22-05_crop_8',
-'2026-04-04_23-26-08_crop_1','2026-04-04_23-26-08_crop_2','2026-04-04_23-26-08_crop_3','2026-04-04_23-26-08_crop_4']
-
-
-'''
 
 
 
 #%% Make clips for nest
+src_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\cropped_videos\female_P42"
+pq_folder=r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\parquet\female_P42\baseline"
+dest_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\validation\nest_try"
+video_names = ['2026-04-11_19-30-20_crop_5','2026-04-11_19-30-20_crop_6','2026-04-11_19-30-20_crop_7','2026-04-11_19-30-20_crop_8',
+               '2026-04-11_19-30-22_crop_1','2026-04-11_19-30-22_crop_2','2026-04-11_19-30-22_crop_3','2026-04-11_19-30-22_crop_4']
+
+event_df_path = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\nest_try\female_P42\baseline\nest_events.csv"
+for video in video_names:
+    video_filepath = os.path.join(src_folder,f'{video}.mp4')
+    dlc_filepath = os.path.join(pq_folder,f'{video}.parquet')
+
+    event_df_all = pd.read_csv(event_df_path)
+    event_df = event_df_all[event_df_all['video']==video]
+    event_df_clips = event_df[(event_df['start_frame']>=10000) & (event_df['end_frame']<=60000)]
+    event_df_clips[['video','mouse','start_frame','end_frame','duration']].to_excel(os.path.join(dest_folder,f'validation_{video}.xlsx'))
+
+    output_folder = os.path.join(dest_folder,video)
+    os.makedirs(output_folder, exist_ok = True)
+    
+    export_clips_single(events_df = event_df_clips, video_path = video_filepath, path_dlc = dlc_filepath, video_export_path = output_folder)
+
+#%% Make clips for nest
 src_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\cropped_videos\male_P35"
 pq_folder=r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\parquet\male_P35\baseline"
-dest_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\validation\nest"
+dest_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\validation\nest_try"
 video_names = ['2026-04-04_19-26-02_crop_5','2026-04-04_19-26-02_crop_6','2026-04-04_19-26-02_crop_7','2026-04-04_19-26-02_crop_8',
-'2026-04-04_19-26-05_crop_1','2026-04-04_19-26-05_crop_2','2026-04-04_19-26-05_crop_3','2026-04-04_19-26-05_crop_4',
-'2026-04-04_23-22-05_crop_5','2026-04-04_23-22-05_crop_6','2026-04-04_23-22-05_crop_7','2026-04-04_23-22-05_crop_8',
-'2026-04-04_23-26-08_crop_1','2026-04-04_23-26-08_crop_2','2026-04-04_23-26-08_crop_3','2026-04-04_23-26-08_crop_4']
+               '2026-04-04_19-26-05_crop_1','2026-04-04_19-26-05_crop_2','2026-04-04_19-26-05_crop_3','2026-04-04_19-26-05_crop_4']
 
-event_df_path = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\nest\male_P35\baseline\nest_events.csv"
+event_df_path = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\nest_try\male_P35\baseline\nest_events.csv"
 for video in video_names:
     video_filepath = os.path.join(src_folder,f'{video}.mp4')
     dlc_filepath = os.path.join(pq_folder,f'{video}.parquet')
@@ -115,16 +123,42 @@ for video in video_names:
 
 
 # %% ROIs
-src_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\cropped_videos\male_P35"
-pq_folder=r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\parquet\male_P35\baseline"
-dest_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\validation\ROIs"
-video_names = ['2026-04-04_19-26-02_crop_5','2026-04-04_19-26-02_crop_6','2026-04-04_19-26-02_crop_7','2026-04-04_19-26-02_crop_8',
-'2026-04-04_19-26-05_crop_1','2026-04-04_19-26-05_crop_2','2026-04-04_19-26-05_crop_3','2026-04-04_19-26-05_crop_4',
-'2026-04-04_23-22-05_crop_5','2026-04-04_23-22-05_crop_6','2026-04-04_23-22-05_crop_7','2026-04-04_23-22-05_crop_8',
-'2026-04-04_23-26-08_crop_1','2026-04-04_23-26-08_crop_2','2026-04-04_23-26-08_crop_3','2026-04-04_23-26-08_crop_4']
+src_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\cropped_videos\female_P35"
+pq_folder=r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\parquet\female_P35\baseline"
+dest_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\validation\ROI"
+video_names = ['2026-07-24_17-55-39_crop_5','2026-07-24_17-55-39_crop_6','2026-07-24_17-55-39_crop_7','2026-07-24_17-55-39_crop_8',
+               '2026-07-26_01-56-02_crop_1','2026-07-26_01-56-02_crop_2','2026-07-26_01-56-02_crop_3','2026-07-26_01-56-02_crop_4']
 
 ROIs = ['s_wall','ramp1','ramp2','woodstick','feeder_prox', 'feeder_dist','water_prox','water_dist']
-events_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\April_2026\ROIs\male_P35\baseline"
+events_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\ROIs\female_P35\baseline"
+
+for video in video_names:
+    video_filepath = os.path.join(src_folder,f'{video}.mp4')
+    dlc_filepath = os.path.join(pq_folder,f'{video}.parquet')
+    output_folder_video = os.path.join(dest_folder,video)
+    os.makedirs(output_folder_video, exist_ok = True)
+
+    for roi in ROIs:
+        event_df_all = pd.read_csv(os.path.join(events_folder,f'{roi}_events.csv'))
+        event_df = event_df_all[event_df_all['video']==video]
+        event_df_clips = event_df[(event_df['start_frame']>=10000) & (event_df['end_frame']<=60000)]
+        event_df_clips[['video','mouse','start_frame','end_frame','duration']].to_excel(os.path.join(dest_folder,f'validation_{roi}_{video}.xlsx'))
+
+        output_folder = os.path.join(output_folder_video,roi)
+        os.makedirs(output_folder, exist_ok = True)
+        export_clips_single(events_df = event_df_clips, video_path = video_filepath, path_dlc = dlc_filepath, video_export_path = output_folder)
+
+
+# %%
+src_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\cropped_videos\male_P42"
+pq_folder=r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\parquet\male_P42\baseline"
+dest_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\validation\ROI"
+video_names = ['2026-07-31_18-45-09_crop_5','2026-07-31_18-45-09_crop_6','2026-07-31_18-45-09_crop_7','2026-07-31_18-45-09_crop_8',
+               '2026-08-02_06-45-41_crop_1','2026-08-02_06-45-41_crop_2','2026-08-02_06-45-41_crop_3','2026-08-02_06-45-41_crop_4',
+               '2026-08-01_02-45-21_crop_1','2026-08-01_02-45-21_crop_2','2026-08-01_02-45-21_crop_3','2026-08-01_02-45-21_crop_4']
+
+ROIs = ['s_wall','ramp1','ramp2','woodstick','feeder_prox', 'feeder_dist','water_prox','water_dist']
+events_folder = r"L:\Lopez Laboratory - NEURO\Xiuqi\ELA_MDMA\July_2026\ROIs\male_P42\baseline"
 
 for video in video_names:
     video_filepath = os.path.join(src_folder,f'{video}.mp4')
