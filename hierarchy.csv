@@ -1,4 +1,4 @@
-box,day,phase,mouse,normDS,rank,time_pont,exp,sex,age,mouse_ID,background,treatment,condition
+box,day,phase,mouse,normDS,rank,time_point,exp,sex,age,mouse_ID,background,treatment,condition
 1,1,active,blue,3.0,Alpha,baseline,male_P35,male,P35,1072482,CTRL,MDMA,CTRL_MDMA
 1,1,active,red,1.2499999999999998,Beta,baseline,male_P35,male,P35,1072442,CTRL,MDMA,CTRL_MDMA
 1,1,active,green,0.9999999999999996,Gamma,baseline,male_P35,male,P35,1072240,ELA,MDMA,ELA_MDMA
