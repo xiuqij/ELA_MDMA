@@ -105,3 +105,23 @@ for (box, day, phase),subdf in df.groupby(["box","day","phase"]):
 hierarchy_df.to_csv(os.path.join('/Volumes/labs/Lopez Laboratory - NEURO/Xiuqi/ELA_MDMA/July_2026/chase/male_P42/MDMA','hierarchy.csv'),index=False)
 
 # %%
+keys = pd.read_csv("/Volumes/labs/Lopez Laboratory - NEURO/Xiuqi/ELA_MDMA/behavior_dataset/keys.csv")
+
+# concat all hierarchy data for plotting
+dfs=[]
+for b in batches:
+    print(b)
+    for exp in exps[b]:
+        print(exp)
+        for t in time_points:
+            print(t)
+            df = pd.read_csv(os.path.join(main_path,f'{b}_2026','chase',exp,t,'hierarchy.csv'))
+            df['time_point']= t
+            df['exp'] = exp
+            df['sex'] = exp.split("_")[0]
+            df['age'] = exp.split("_")[1]
+            df = df.merge(keys,how='left',on=['exp','box','mouse'])
+            dfs.append(df)
+df = pd.concat(dfs)
+df.to_csv(os.path.join(main_path,'hierarchy.csv'),index=False)
+# %%
