@@ -1,6 +1,7 @@
 import pandas as pd
+import numpy as np
 
-def compute_event_times(df, fps=25,start_col = 'start', end_col = 'end'): 
+def compute_event_times(df, fps=25,start_col = 'start_frame', end_col = 'end_frame'): 
     '''compute the actual event start and end in date time format '''
     # recording start time 
     df["recording_start"] = pd.to_datetime(
@@ -137,15 +138,81 @@ def add_time_labels(df):
     
     # ZT hour (useful for plotting) 
     df["ZT_hour"] = (df["CT_hour"] - 7) % 24 
-    
+
     return df
 
-def convert_to_1h (df_4h,fps=25,start_col = 'start_frame', end_col = 'end_frame'):
-    cols = ['video','mouse','box','duration_f','event_start', 'event_end', 'date','CT_hour','ZT_day','ZT_hour','phase']
+def add_day_order(df):
+    '''for df of individual experiments
+    e.g., date: 2026-04-04 -> day: 1'''
+    first_day = df["date"].min()
+    first_day = pd.to_datetime(first_day)
+    # hard code start time
+    day1_start = first_day.normalize() + pd.Timedelta(hours=19)
+    # assign day
+    df["day"] = (
+    (df["event_start"] - day1_start).dt.total_seconds() // (24 * 60 * 60)
+    ).astype(int) + 1
+
+    return df
+
+def convert_to_1h (df_4h,fps=25,start_col = 'start_frame', end_col = 'end_frame',keep_cols = ['video','mouse','box','duration_f','event_start', 'event_end', 'date','day','CT_hour','ZT_day','ZT_hour','phase']):
     df_4h = compute_event_times(df_4h, fps=fps,start_col=start_col,end_col=end_col)
-    df_1h = split_events_by_hour(df_4h, fps=fps)
+    df_1h = split_events_by_hour_with_frame(df_4h, fps=fps)
     df_1h = add_time_labels(df_1h)
-    return df_1h[cols]
+    df_1h = add_day_order(df_1h)
+    return df_1h[keep_cols]
+
+def add_timebin_labels(df, resolution):
+    '''
+    resolution 1,2,3,4,6,12 (hr)
+    time_bin: numeric timebin (=the last hour of the window) for sorting
+    time_window: readable time windows (start-end) for plotting
+    '''
+    df['time_bin'] = (
+        ((df['ZT_hour'] // resolution) + 1) * resolution
+    )
+
+    df['time_window'] = (
+        (df['time_bin'] - resolution).astype(int).astype(str)
+        + '-'
+        + (df['time_bin']).astype(int).astype(str)
+    )
+    return df
+
+def regroup_by_timebin(df_1h,resolution,fps=25,group_base = ['mouse','box'],nest=False):
+    '''regroup and compute sums and event counts. 
+    '''
+
+    df = df_1h.copy()
+
+    df = add_timebin_labels(df,resolution)
+    group_cols = group_base + ['time_bin','time_window']
+    group_df = (
+        df.groupby(group_cols,observed=True)['duration_f']
+        .agg(
+            duration_f = 'sum',
+            count = 'size'
+        )
+        .reset_index()
+    )
+    group_df['duration'] = group_df['duration_f'] / fps
+    group_df['mean_duration'] = np.where(group_df['count'] > 0, group_df['duration'] / group_df['count'],0)
+    
+    if nest:
+        unit_total_s = resolution * 60 *60
+        group_df['outside_nest_duration'] = unit_total_s - group_df['duration']
+
+    return group_df
+
+def normalize_by_nest(df,nest_df,group_cols=['day','phase','box','mouse','time_bin','time_window']):
+    # duration, count, mean_duation, outside_nest_duration, duration_fraction, event_rate
+    nest_df = nest_df.rename(columns = {'total_time':'nest_duration','count':'nest_count','avg_time':'nest_mean_duration','outside_total_time':'outside_nest_duration'})
+    #nest_df = nest_df.rename(columns = {'duration':'nest_duration','count':'nest_count','mean_duration':'nest_mean_duration'})
+    nest_cols = group_cols + ['nest_duration','outside_nest_duration','nest_count','nest_mean_duration']
+    df = df.merge(nest_df[nest_cols],how='outer',on=group_cols)
+    df['duration_fraction'] = df['duration'] / df['outside_nest_duration']
+    df['event_rate'] = df['count'] / df['outside_nest_duration']
+    return df
 
 def get_summary_stats(raw_df, 
                       fps = 25, 
