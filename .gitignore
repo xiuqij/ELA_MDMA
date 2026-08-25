@@ -19,3 +19,8 @@ archived_scripts/
 
 # VS Code settings
 .vscode/
+
+.DS_Store
+
+# do not track for now
+feature_metadata.*
