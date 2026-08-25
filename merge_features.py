@@ -60,7 +60,7 @@ batches = ['April','July']
 exps = {'April':['male_P35','female_P42'],'July':['female_P35','male_P42']}
 time_points = ['baseline','MDMA']
 
-output_path = "/Volumes/labs/Lopez Laboratory - NEURO/Xiuqi/ELA_MDMA/merged_features"
+output_path = "/Volumes/labs/Lopez Laboratory - NEURO/Xiuqi/ELA_MDMA/behavior_dataset"
 #%%
 # steps 1-3
 rois = ['s_wall','ramp1','ramp2','non_wall','woodstick','feeder_prox', 'feeder_dist','water_prox','water_dist']
@@ -127,7 +127,7 @@ female/MDMA/active
 female/MDMA/inactive
 '''
 #%%
-keys = pd.read_csv("/Volumes/labs/Lopez Laboratory - NEURO/Xiuqi/ELA_MDMA/merged_features/keys.csv")
+keys = pd.read_csv("/Volumes/labs/Lopez Laboratory - NEURO/Xiuqi/ELA_MDMA/behavior_dataset/keys.csv")
 # male
 for res in [1,2,3,4,6,12]:
     dfs=[]
@@ -136,7 +136,7 @@ for res in [1,2,3,4,6,12]:
         sex = exp_name.split("_")[0]
         age = exp_name.split("_")[1]
         for t in ['baseline','MDMA']:
-            df = pd.read_csv(os.path.join(output_path,f'{exp}_{t}_{res}h.csv'))
+            df = pd.read_csv(os.path.join(output_path,'all_exps',f'{exp}_{t}_{res}h.csv'))
             df['time_point'] = t
             df['exp'] = exp_name
             df['sex'] = sex
@@ -144,7 +144,8 @@ for res in [1,2,3,4,6,12]:
             df = df.merge(keys,how='left',on=['exp','box','mouse'])
             dfs.append(df)
     df = pd.concat(dfs)
-    df.to_csv(os.path.join(output_path,'concat',f'male_{res}h.csv'),index=False)
+    df.to_csv(os.path.join(output_path,'final','master_feature_table',f'male_{res}h.csv'),index=False)
+
 # female
 for res in [1,2,3,4,6,12]:
     dfs=[]
@@ -153,7 +154,7 @@ for res in [1,2,3,4,6,12]:
         sex = exp_name.split("_")[0]
         age = exp_name.split("_")[1]
         for t in ['baseline','MDMA']:
-            df = pd.read_csv(os.path.join(output_path,f'{exp}_{t}_{res}h.csv'))
+            df = pd.read_csv(os.path.join(output_path,'all_exps',f'{exp}_{t}_{res}h.csv'))
             df['time_point'] = t
             df['exp'] = exp_name
             df['sex'] = sex
@@ -161,7 +162,7 @@ for res in [1,2,3,4,6,12]:
             df = df.merge(keys,how='left',on=['exp','box','mouse'])
             dfs.append(df)
     df = pd.concat(dfs)
-    df.to_csv(os.path.join(output_path,'concat',f'female_{res}h.csv'),index=False)
+    df.to_csv(os.path.join(output_path,'final','master_feature_table',f'female_{res}h.csv'),index=False)
 #%%
 # subset
 for res in [1,2,3,4,6,12]:
