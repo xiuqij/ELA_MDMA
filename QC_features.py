@@ -3,9 +3,10 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import numpy as np
 #%%
 master_path = "/Users/xiuqi.ji/Library/CloudStorage/OneDrive-KarolinskaInstitutet/MDMA_ELA/social_box_2026/github_repo/behavior_dataset/final/master_feature_table"
+QC_output_path = "/Users/xiuqi.ji/Library/CloudStorage/OneDrive-KarolinskaInstitutet/MDMA_ELA/social_box_2026/github_repo/behavior_dataset/final/QC_table"
 #%%
 resolutions = [1,2,3,4,6,12]
 info_cols = ['day', 'phase', 'box', 'mouse', 'time_bin', 'time_window','time_point', 'exp', 'sex', 'age', 'mouse_ID', 'background', 'treatment', 'condition']
@@ -30,7 +31,7 @@ speeding_cols = ['speeding_count', 'speeding_duration', 'speeding_mean_duration'
 social_cols = ['nest_frames', 'weighted_sum', 'alone_sum', 'weighted_co_occupancy', 'alone_fraction', 'feeding_frames', 'drinking_frames', 'ramps_frames', 's_wall_frames', 'feeding_together_frames', 'drinking_together_frames', 'ramps_together_frames', 's_wall_together_frames', 'feeding_alone_frames', 'drinking_alone_frames', 'ramps_alone_frames', 's_wall_alone_frames', 'feeding_together_fraction', 'feeding_alone_fraction', 'drinking_together_fraction', 'drinking_alone_fraction', 'ramps_together_fraction', 'ramps_alone_fraction', 's_wall_together_fraction', 's_wall_alone_fraction']
 
 #%%
-# Basic structure
+# 1. Basic structure
 
 key_cols = ['day','phase','box','mouse','time_bin','time_window','time_point','exp']
 
@@ -72,4 +73,67 @@ for sex in ['male','female']:
 
 
 
+# %%
+# 2. completeness
+group_cols = ['exp','time_point','day','phase','box','mouse']
+
+for sex in ['male','female']:
+    for res in resolutions:
+        df = pd.read_csv(os.path.join(master_path,f'{sex}_{res}h.csv'))
+        counts = (
+            df.groupby(
+                group_cols
+            )['time_bin']
+            .nunique()
+        )
+        print(f'\n{sex}_{res}h:')
+        print(counts.rename('n_bins').reset_index().to_string(index=False))
+# %%
+# flag impossible values
+# male_P42, MDMA, box 8, blue
+# extreme locomotion values
+# flag timebin that wont be used for now (day 0 and day 3 inactive)
+def flag_locomotion_outlier(df):
+    Q1 = df['mean_speed'].quantile(.25)
+    Q3 = df['mean_speed'].quantile(.75)
+    IQR = Q3 - Q1
+    upper = Q3 + 3*IQR
+    df['qc_speed_outlier'] = df['mean_speed'] > upper
+    return df
+def flag_missing_mouse(df):
+    mask = (df['exp']=='male_P42') & (df['time_point']=='MDMA') & (df['box']==8) & (df['mouse'] == 'blue')
+    df['qc_exclude'] = mask
+    return df
+def flag_statictical_outlier(df,col):
+    median = df[col].median
+    mad = np.median(np.abs(df[col] - median))
+    if mad ==0:
+        df[f'qc_{col}_statistical_outlier'] = False
+        return df
+    robust_z = 0.6745 * (df[col] - median)/mad
+    df[f'qc_{col}_statistical_outlier'] = robust_z.abs() > 3.5
+    return df
+
+def flag_unused_day(df):
+    mask = (~df['day'].isin([1,2,3])) | ((df['day']==3) & (df['phase']=='inactive'))
+    df['qc_exclude_timebin'] = mask
+    return df
+
+def add_box_ID(df):
+    # male_P35, female_P42 -> 1 ; 
+    is_batch2 = (df['exp']=='male_P42') | (df['exp']=='female_P35')
+    df['box_ID'] = df['box'] + (is_batch2 + 1)*10
+    return df
+#%%
+for sex in ['male','female']:
+    for res in resolutions:
+        df = pd.read_csv(os.path.join(master_path,f'{sex}_{res}h.csv'))
+        df = flag_missing_mouse(df)
+        df = flag_locomotion_outlier(df)
+        df = flag_unused_day(df)
+        df.to_csv(os.path.join(QC_output_path,f'{sex}_{res}h_flagged.csv'),index=False)
+        df_filtered = df[~df['qc_exclude']==1]
+        df_filtered = df_filtered[~df_filtered['qc_exclude_timebin']==1]
+        df_filtered = add_box_ID(df_filtered)
+        df_filtered.to_csv(os.path.join(QC_output_path,f'{sex}_{res}h_filtered.csv'),index=False)
 # %%
