@@ -76,24 +76,49 @@ motionless_cols <- c('motionless_count', 'motionless_duration', 'motionless_mean
 speeding_cols <- c('speeding_count', 'speeding_duration', 'speeding_mean_duration', 'speeding_duration_fraction', 'speeding_event_rate')
 social_cols <- c('nest_frames', 'weighted_sum', 'alone_sum', 'weighted_co_occupancy', 'alone_fraction', 'feeding_frames', 'drinking_frames', 'ramps_frames', 's_wall_frames', 'feeding_together_frames', 'drinking_together_frames', 'ramps_together_frames', 's_wall_together_frames', 'feeding_alone_frames', 'drinking_alone_frames', 'ramps_alone_frames', 's_wall_alone_frames', 'feeding_together_fraction', 'feeding_alone_fraction', 'drinking_together_fraction', 'drinking_alone_fraction', 'ramps_together_fraction', 'ramps_alone_fraction', 's_wall_together_fraction', 's_wall_alone_fraction')
 
+color_map_4 <- c(
+  "CTRL_saline"= "#36648B",
+  "CTRL_MDMA"="#d64040",
+  "ELA_saline"= "#FFA500",
+  "ELA_MDMA"= "#ba4e71"
+)
+color_map_2 <- c(
+  "CTRL"= "#36648B",
+  "ELA"= "#FFA500"
+)
 #############  ##################
 
 ############# descriptive stats ##################
 ## READ DATA
-data <- read.csv(get_filtered_table_path('male',12))
+male_12h <- read.csv(get_filtered_table_path('male',12))
+female_12h <- read.csv(get_filtered_table_path('female',12))
+male_6h <- read.csv(get_filtered_table_path('male',6))
+female_6h <- read.csv(get_filtered_table_path('female',6))
+male_4h <- read.csv(get_filtered_table_path('male',4))
+female_4h <- read.csv(get_filtered_table_path('female',4))
+male_3h <- read.csv(get_filtered_table_path('male',3))
+female_3h <- read.csv(get_filtered_table_path('female',3))
+male_2h <- read.csv(get_filtered_table_path('male',2))
+female_2h <- read.csv(get_filtered_table_path('female',2))
+male_1h <- read.csv(get_filtered_table_path('male',1))
+female_1h <- read.csv(get_filtered_table_path('female',1))
+data <- male_3h
+data <- data %>% replace(is.na(.), 0)
+
+data$day_time <- paste0("day ",data$day," ",data$time_window)
 baseline_active <- subset_data(data,time_point = 'baseline',phase = 'active')
 mdma_active <- subset_data(data,time_point = 'MDMA',phase = 'active')
-baseline_active_ELA <- subset_data(baseline_active,condition = c('ELA_saline','ELA_MDMA'))
 summary(baseline_active)
 ggplot(
   baseline_active,
   aes(
-    x = factor(day),
-    y = valid_locomotion_duration,
+    x = factor(day_time),
+    y = motionless_duration_fraction,
     colour = background,
     group = mouse_ID
   )
 ) +
+  scale_color_manual(values = color_map_2) +
   geom_line(alpha = .3) +
   geom_point() +
   stat_summary(
@@ -115,8 +140,15 @@ ggplot(
 ############# Quick PCA ##################
 male_12h <- read.csv(get_filtered_table_path('male',12))
 female_12h <- read.csv(get_filtered_table_path('female',12))
+male_6h <- read.csv(get_filtered_table_path('male',6))
+female_6h <- read.csv(get_filtered_table_path('female',6))
 
-pca_df <- subset_data(female_12h,time_point = 'baseline',phase = 'active')
+male_4h <- read.csv(get_filtered_table_path('male',4))
+female_4h <- read.csv(get_filtered_table_path('female',4))
+
+
+
+pca_df <- subset_data(female_4h,time_point = 'baseline',phase = 'active')
 pca_features <- c('nest_duration',#'total_distance',
                   'mean_speed', 'mean_abs_angular_velocity','motionless_mean_duration','speeding_duration_fraction',
                   's_wall_duration_fraction', 'ramp1_duration_fraction','ramp2_duration_fraction', 'feeder_prox_duration_fraction','feeder_dist_duration_fraction',
@@ -150,16 +182,18 @@ pca <- prcomp(
 scores <- as.data.frame(pca$x) %>%
   bind_cols(
     pca_df %>%
-      select(mouse_ID, sex, background, exp,day)
+      select(mouse_ID, sex, background, exp,day,time_window)
   )
 # plot 
-ggplot(scores, aes(PC1, PC2, colour = background, shape = sex)) +
+ggplot(scores, aes(PC1, PC2, color = background, shape = exp)) +
   geom_point(size = 3) +
+  scale_color_manual(values = color_map_2) +
   theme_bw()
 
-ggplot(scores, aes(PC1, PC2, colour = background)) +
+ggplot(scores, aes(PC1, PC2, colour = background, shape=as.factor(day))) +
   geom_point(size = 3) +
-  facet_wrap(~ day) +
+  facet_wrap(~ time_window) +
+  scale_color_manual(values = color_map_2) +
   theme_bw()
 # check explained variance
 summary(pca)
