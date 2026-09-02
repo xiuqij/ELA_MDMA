@@ -30,8 +30,7 @@ from scipy.stats import skew as skew_fn
 SKEW_THRESHOLD = 1.0
 
 # ============================================================================
-# CORE domains - primary hypothesis-testing set (v3 base, minus agonistic_engagement_score,
-# plus chasing_activity_score / being_chased_score)
+# CORE domains - curated, 12 domains in 6 categories (Nest,Motion,Exploration,Foraging,Social affiliation,Social hierarchy)
 # ============================================================================
 CORE_DOMAINS = {
     'nest_occupancy_score': {
@@ -40,18 +39,31 @@ CORE_DOMAINS = {
                        'elevated nest occupancy plausibly reflects withdrawal / reduced '
                        'environmental engagement rather than normal sleep.',
     },
+
+    'nest_fragmentation_score': {
+            'features': ['nest_count'], 'flip': ['nest_mean_duration'],
+            'definition': 'Bout structure independent of total nest time: many short visits '
+                           '(high count, low mean_duration) vs. few long ones. r(count, mean_'
+                           'duration)=-0.87 confirms these move opposite each other - combined as a '
+                           'single "fragmentation" axis (high score = more, shorter visits = more '
+                           'restless/vigilant nest-use pattern). nest_count and nest_mean_duration '
+                           'were unused in v3; this integrates them.',
+        },
+    
     'locomotion_score': {
         'features': ['total_distance', 'mean_speed', 'median_speed', 'mean_abs_acceleration'],
         'flip': [],
         'definition': 'General locomotor output/vigor - "how much and how fast" a mouse moves. '
                        'These four features form one tight empirical cluster (r=0.75-0.99).',
     },
+
     'movement_complexity_score': {
         'features': ['mean_abs_angular_velocity'], 'flip': [],
         'definition': 'Path tortuosity / turning rate. Near-orthogonal to the locomotion '
                        'cluster (r=-0.07 to -0.33) - a distinct construct (search strategy / '
                        'scanning behavior), not simply "moving more or faster".',
     },
+
     'inactivity_score': {
         'features': ['motionless_duration_fraction', 'motionless_event_rate'], 'flip': [],
         'definition': 'Time immobile OUTSIDE the nest (freezing/pausing in the open). '
@@ -59,6 +71,7 @@ CORE_DOMAINS = {
                        '"on duty" in the open arena, which in rodent literature often indexes '
                        'vigilance/anxiety-like freezing rather than restorative rest.',
     },
+
     'speeding_score': {
         'features': ['speeding_duration_fraction', 'speeding_event_rate'], 'flip': [],
         'definition': 'Frequency/duration of discrete high-speed ("dash") bouts. NOT the same '
@@ -66,6 +79,7 @@ CORE_DOMAINS = {
                        'speeding features (r=-0.51) - mice with high average pace are not the '
                        'same mice who dash a lot.',
     },
+
     'exploration_score': {
         'features': ['s_wall_duration_fraction', 's_wall_event_rate',
                      'ramp1_duration_fraction', 'ramp1_event_rate',
@@ -80,6 +94,7 @@ CORE_DOMAINS = {
                        'though not a bare open field (s-wall is also central), so treated as a '
                        'proxy only. Included here as in v3.',
     },
+
     'feeding_drinking_amount_score': {
         'features': ['feeder_prox_duration_fraction', 'feeder_prox_event_rate',
                      'feeder_dist_duration_fraction', 'feeder_dist_event_rate',
@@ -89,6 +104,7 @@ CORE_DOMAINS = {
         'definition': 'Overall ingestive-zone engagement, prox+dist combined (magnitude, not '
                        'location).',
     },
+
     'resource_proximity_preference_score': {
         'features': ['feeder_prox_pref', 'water_prox_pref'], 'flip': [],
         'definition': 'PROX zones sit closer to the nest than DIST zones, so the balance '
@@ -98,10 +114,12 @@ CORE_DOMAINS = {
                        'weakly correlate with each other (r=0.20) - use feeder_preference_score '
                        '/ water_preference_score (supplementary) for resource-specific detail.',
     },
+
     'social_affiliation_nest_score': {
         'features': ['weighted_co_occupancy'], 'flip': ['alone_fraction'],
         'definition': 'Huddling/resting togetherness in the nest specifically.',
     },
+
     'social_affiliation_activity_score': {
         'features': ['feeding_together_fraction', 'drinking_together_fraction',
                      'ramps_together_fraction', 's_wall_together_fraction'],
@@ -113,6 +131,7 @@ CORE_DOMAINS = {
                        'r=-1.00 - using together_fraction alone already captures the full '
                        'information.)',
     },
+
     'social_hierarchy_score': {
         'features': ['normDS', 'chasing_duration_ratio'], 'flip': [],
         'definition': 'Dominance OUTCOME - "who wins" when a chase interaction happens. '
@@ -120,32 +139,33 @@ CORE_DOMAINS = {
                        'redundant); chased_duration_ratio dropped (exact complement, r=-1.00). '
                        'Unchanged from v3.',
     },
-    'chasing_activity_score': {
-        'features': ['chasing_duration_fraction', 'chasing_event_rate'], 'flip': [],
-        'definition': 'How often/long this mouse initiates chases of others - an assertive/'
-                       'pursuit-role behavior. NOT part of social_hierarchy_score (which is '
-                       'about outcome, not role-frequency). Kept SEPARATE from being_chased_'
-                       'score rather than averaged into one "engagement" score: the two roles '
-                       'moved in OPPOSITE directions for the male ELA effect (dz=-1.41 vs '
-                       '+1.34) - averaging would produce a misleading, partially-cancelled '
-                       'number.',
-    },
-    'being_chased_score': {
-        'features': ['chased_duration_fraction', 'chased_event_rate'], 'flip': [],
-        'definition': 'How often/long this mouse is the target of chases - a defensive/evasive-'
-                       'role behavior, ethologically distinct from chasing_activity_score. '
-                       'Together the two scores show e.g. that ELA males aren\'t just "losing '
-                       'more" (lower social_hierarchy_score) but are specifically being '
-                       'targeted MORE, not merely chasing less - information the dropped '
-                       'agonistic_engagement_score obscured rather than revealed.',
-    },
+    
 }
 
 # ============================================================================
-# SUPPLEMENTARY domains. Use for follow-up characterization, not as a first-pass FDR-corrected screen.
+# SUPPLEMENTARY domains. Curated, 12 more detailed domains.
+# Use for follow-up characterization, not as a first-pass FDR-corrected screen.
 # ============================================================================
 SUPPLEMENTARY_DOMAINS = {
-    # --- v3 originals ---
+    'chasing_activity_score': {
+            'features': ['chasing_duration_fraction', 'chasing_event_rate'], 'flip': [],
+            'definition': 'How often/long this mouse initiates chases of others - an assertive/'
+                           'pursuit-role behavior. NOT part of social_hierarchy_score (which is '
+                           'about outcome, not role-frequency). Kept SEPARATE from being_chased_'
+                           'score rather than averaged into one "engagement" score: the two roles '
+                           'moved in OPPOSITE directions for the male ELA effect (dz=-1.41 vs '
+                           '+1.34) - averaging would produce a misleading, partially-cancelled '
+                           'number.',
+        },
+        'being_chased_score': {
+            'features': ['chased_duration_fraction', 'chased_event_rate'], 'flip': [],
+            'definition': 'How often/long this mouse is the target of chases - a defensive/evasive-'
+                           'role behavior, ethologically distinct from chasing_activity_score. '
+                           'Together the two scores show e.g. that ELA males aren\'t just "losing '
+                           'more" (lower social_hierarchy_score) but are specifically being '
+                           'targeted MORE, not merely chasing less - information the dropped '
+                           'agonistic_engagement_score obscured rather than revealed.',
+        },
     'social_affiliation_feeding_drinking_score': {
         'features': ['feeding_together_fraction', 'drinking_together_fraction'], 'flip': [],
         'definition': 'Finer split of social_affiliation_activity_score: co-occupancy '
@@ -166,15 +186,6 @@ SUPPLEMENTARY_DOMAINS = {
         'definition': 'Resource-specific version of resource_proximity_preference_score.',
     },
     # --- mean_duration ("bout length") features ---
-    'nest_fragmentation_score': {
-        'features': ['nest_count'], 'flip': ['nest_mean_duration'],
-        'definition': 'Bout structure independent of total nest time: many short visits '
-                       '(high count, low mean_duration) vs. few long ones. r(count, mean_'
-                       'duration)=-0.87 confirms these move opposite each other - combined as a '
-                       'single "fragmentation" axis (high score = more, shorter visits = more '
-                       'restless/vigilant nest-use pattern). nest_count and nest_mean_duration '
-                       'were unused in v3; this integrates them.',
-    },
     'inactivity_bout_length_score': {
         'features': ['motionless_mean_duration'], 'flip': [],
         'definition': 'Are freezing bouts brief pauses or sustained immobility? Distinct '
