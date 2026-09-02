@@ -83,47 +83,58 @@ def plot_effect_table(results, effect_col='cohen_dz', sig_col='p_fdr', sig_thres
 
     order = feature_order if feature_order is not None else FEATURE_ORDER
 
-    n = len(results)
-    fig, axes = plt.subplots(1, n, figsize=(6 * n, 8), sharex=True, squeeze=False)
+    # Pre-filter each panel to the shared order so figure height can be sized to fit.
+    panel_data = {}
+    for panel_label, res in results.items():
+        panel_order = [f for f in order if f in set(res['feature'])]
+        panel_data[panel_label] = res.set_index('feature').loc[panel_order].reset_index()
+
+    n = len(panel_data)
+    max_rows = max((len(res) for res in panel_data.values()), default=0)
+    fig, axes = plt.subplots(1, n, figsize=(7.5 * n, max(8, 0.5 * max_rows)),
+                              sharex=True, squeeze=False)
     axes = axes[0]
 
-    for ax, (panel_label, res) in zip(axes, results.items()):
-        panel_order = [f for f in order if f in set(res['feature'])]
-        res = res.set_index('feature').loc[panel_order].reset_index()
+    for ax, (panel_label, res) in zip(axes, panel_data.items()):
         y = np.arange(len(res))
         colors = np.where(res[effect_col] >= 0, COLOR_POS, COLOR_NEG)
         sig = res[sig_col] < sig_thresh
+        # drop the "_score" suffix on domain labels to save horizontal space
+        display_labels = [f[:-len('_score')] if f.endswith('_score') else f
+                           for f in res['feature']]
 
         ax.hlines(y, 0, res[effect_col], color=colors, linewidth=1.5, zorder=1)
-        ax.scatter(res.loc[sig, effect_col], y[sig], color=colors[sig], s=60,
+        ax.scatter(res.loc[sig, effect_col], y[sig], color=colors[sig], s=70,
                    edgecolor=colors[sig], linewidth=1, zorder=2)
         ax.scatter(res.loc[~sig, effect_col], y[~sig], facecolor='white',
-                   edgecolor=colors[~sig], linewidth=1.5, s=60, zorder=2)
+                   edgecolor=colors[~sig], linewidth=1.5, s=70, zorder=2)
 
         ax.axvline(0, color=COLOR_MUTED, linewidth=1, linestyle='--', zorder=0)
         ax.set_yticks(y)
-        ax.set_yticklabels(res['feature'], fontsize=8)
+        ax.set_yticklabels(display_labels, fontsize=12)
         ax.invert_yaxis()  # first entry in `order` on top
-        ax.set_xlabel(xlabel)
+        ax.set_xlabel(xlabel, fontsize=13)
         subtitle = panel_label
         if 'n_pairs' in res.columns and len(res):
             subtitle = f'{panel_label} (n={res["n_pairs"].iloc[0]} box pairs)'
-        ax.set_title(subtitle)
+        ax.set_title(subtitle, fontsize=14)
         ax.tick_params(axis='y', length=0)
+        ax.tick_params(axis='x', labelsize=11)
         sns.despine(ax=ax, left=True)
         ax.grid(axis='x', color=COLOR_MUTED, alpha=0.25, linewidth=0.5)
 
     handles = [
-        plt.Line2D([0], [0], marker='o', color=COLOR_POS, linestyle='', markersize=8,
+        plt.Line2D([0], [0], marker='o', color=COLOR_POS, linestyle='', markersize=10,
                    label=f'{pos_label}, {sig_col} < {sig_thresh}'),
-        plt.Line2D([0], [0], marker='o', color=COLOR_NEG, linestyle='', markersize=8,
+        plt.Line2D([0], [0], marker='o', color=COLOR_NEG, linestyle='', markersize=10,
                    label=f'{neg_label}, {sig_col} < {sig_thresh}'),
         plt.Line2D([0], [0], marker='o', markerfacecolor='white', markeredgecolor=COLOR_MUTED,
-                   linestyle='', markersize=8, label=f'n.s. ({sig_col} >= {sig_thresh})'),
+                   linestyle='', markersize=10, label=f'n.s. ({sig_col} >= {sig_thresh})'),
     ]
-    fig.legend(handles=handles, loc='lower center', ncol=3, frameon=False, bbox_to_anchor=(0.5, -0.02))
+    fig.legend(handles=handles, loc='lower center', ncol=3, frameon=False,
+               fontsize=12, bbox_to_anchor=(0.5, -0.02))
     if title:
-        fig.suptitle(title, color=COLOR_INK)
+        fig.suptitle(title, color=COLOR_INK, fontsize=16)
     plt.tight_layout(rect=(0, 0.03, 1, 1))
 
     if save_path:
