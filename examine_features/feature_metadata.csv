@@ -1,0 +1,108 @@
+feature,family,type,units,denominator,model,transform,notes
+nest_duration,nest,continuous,s,time_window,LME,none,Total time spent in nest during the time window
+outside_nest_duration,nest,continuous,s,time_window,LME,none,Total time spent outside nest during the time window; important exposure variable for ROI/event features
+nest_count,nest,count,events,time_window,negative_binomial,none,Number of nest-entry/occupancy events
+nest_mean_duration,nest,positive_continuous,s/event,nest_count,gamma_or_log_LME,log_if_needed,Mean duration per nest event
+s_wall_count,roi,count,events,outside_nest_duration,negative_binomial,none,Number of s_wall events
+s_wall_duration,roi,positive_continuous,s,outside_nest_duration,gamma_or_log_LME,log_if_needed,Total time spent at s_wall
+s_wall_mean_duration,roi,positive_continuous,s/event,s_wall_count,gamma_or_log_LME,log_if_needed,Mean duration per s_wall event
+s_wall_duration_fraction,roi,proportion,fraction,outside_nest_duration,beta_or_fraction_model,none,Fraction of outside-nest time spent at s_wall
+s_wall_event_rate,roi,rate,events/s,outside_nest_duration,negative_binomial_with_offset,none,s_wall events per unit outside-nest exposure
+ramp1_count,roi,count,events,outside_nest_duration,negative_binomial,none,Number of ramp1 events
+ramp1_duration,roi,positive_continuous,s,outside_nest_duration,gamma_or_log_LME,log_if_needed,Total time spent at ramp1
+ramp1_mean_duration,roi,positive_continuous,s/event,ramp1_count,gamma_or_log_LME,log_if_needed,Mean duration per ramp1 event
+ramp1_duration_fraction,roi,proportion,fraction,outside_nest_duration,beta_or_fraction_model,none,Fraction of outside-nest time spent at ramp1
+ramp1_event_rate,roi,rate,events/s,outside_nest_duration,negative_binomial_with_offset,none,ramp1 events per unit outside-nest exposure
+ramp2_count,roi,count,events,outside_nest_duration,negative_binomial,none,Number of ramp2 events
+ramp2_duration,roi,positive_continuous,s,outside_nest_duration,gamma_or_log_LME,log_if_needed,Total time spent at ramp2
+ramp2_mean_duration,roi,positive_continuous,s/event,ramp2_count,gamma_or_log_LME,log_if_needed,Mean duration per ramp2 event
+ramp2_duration_fraction,roi,proportion,fraction,outside_nest_duration,beta_or_fraction_model,none,Fraction of outside-nest time spent at ramp2
+ramp2_event_rate,roi,rate,events/s,outside_nest_duration,negative_binomial_with_offset,none,ramp2 events per unit outside-nest exposure
+non_wall_count,roi,count,events,outside_nest_duration,negative_binomial,none,Number of non_wall events
+non_wall_duration,roi,positive_continuous,s,outside_nest_duration,gamma_or_log_LME,log_if_needed,Total time spent at non_wall
+non_wall_mean_duration,roi,positive_continuous,s/event,non_wall_count,gamma_or_log_LME,log_if_needed,Mean duration per non_wall event
+non_wall_duration_fraction,roi,proportion,fraction,outside_nest_duration,beta_or_fraction_model,none,Fraction of outside-nest time spent at non_wall
+non_wall_event_rate,roi,rate,events/s,outside_nest_duration,negative_binomial_with_offset,none,non_wall events per unit outside-nest exposure
+woodstick_count,roi,count,events,outside_nest_duration,negative_binomial,none,Number of woodstick events
+woodstick_duration,roi,positive_continuous,s,outside_nest_duration,gamma_or_log_LME,log_if_needed,Total time spent at woodstick
+woodstick_mean_duration,roi,positive_continuous,s/event,woodstick_count,gamma_or_log_LME,log_if_needed,Mean duration per woodstick event
+woodstick_duration_fraction,roi,proportion,fraction,outside_nest_duration,beta_or_fraction_model,none,Fraction of outside-nest time spent at woodstick
+woodstick_event_rate,roi,rate,events/s,outside_nest_duration,negative_binomial_with_offset,none,woodstick events per unit outside-nest exposure
+feeder_prox_count,roi,count,events,outside_nest_duration,negative_binomial,none,Number of feeder_prox events
+feeder_prox_duration,roi,positive_continuous,s,outside_nest_duration,gamma_or_log_LME,log_if_needed,Total time spent at feeder_prox
+feeder_prox_mean_duration,roi,positive_continuous,s/event,feeder_prox_count,gamma_or_log_LME,log_if_needed,Mean duration per feeder_prox event
+feeder_prox_duration_fraction,roi,proportion,fraction,outside_nest_duration,beta_or_fraction_model,none,Fraction of outside-nest time spent at feeder_prox
+feeder_prox_event_rate,roi,rate,events/s,outside_nest_duration,negative_binomial_with_offset,none,feeder_prox events per unit outside-nest exposure
+feeder_dist_count,roi,count,events,outside_nest_duration,negative_binomial,none,Number of feeder_dist events
+feeder_dist_duration,roi,positive_continuous,s,outside_nest_duration,gamma_or_log_LME,log_if_needed,Total time spent at feeder_dist
+feeder_dist_mean_duration,roi,positive_continuous,s/event,feeder_dist_count,gamma_or_log_LME,log_if_needed,Mean duration per feeder_dist event
+feeder_dist_duration_fraction,roi,proportion,fraction,outside_nest_duration,beta_or_fraction_model,none,Fraction of outside-nest time spent at feeder_dist
+feeder_dist_event_rate,roi,rate,events/s,outside_nest_duration,negative_binomial_with_offset,none,feeder_dist events per unit outside-nest exposure
+water_prox_count,roi,count,events,outside_nest_duration,negative_binomial,none,Number of water_prox events
+water_prox_duration,roi,positive_continuous,s,outside_nest_duration,gamma_or_log_LME,log_if_needed,Total time spent at water_prox
+water_prox_mean_duration,roi,positive_continuous,s/event,water_prox_count,gamma_or_log_LME,log_if_needed,Mean duration per water_prox event
+water_prox_duration_fraction,roi,proportion,fraction,outside_nest_duration,beta_or_fraction_model,none,Fraction of outside-nest time spent at water_prox
+water_prox_event_rate,roi,rate,events/s,outside_nest_duration,negative_binomial_with_offset,none,water_prox events per unit outside-nest exposure
+water_dist_count,roi,count,events,outside_nest_duration,negative_binomial,none,Number of water_dist events
+water_dist_duration,roi,positive_continuous,s,outside_nest_duration,gamma_or_log_LME,log_if_needed,Total time spent at water_dist
+water_dist_mean_duration,roi,positive_continuous,s/event,water_dist_count,gamma_or_log_LME,log_if_needed,Mean duration per water_dist event
+water_dist_duration_fraction,roi,proportion,fraction,outside_nest_duration,beta_or_fraction_model,none,Fraction of outside-nest time spent at water_dist
+water_dist_event_rate,roi,rate,events/s,outside_nest_duration,negative_binomial_with_offset,none,water_dist events per unit outside-nest exposure
+chasing_duration,chase,positive_continuous,s,time_window,gamma_or_log_LME,log_if_needed,Total duration spent chasing
+chasing_count,chase,count,events,time_window,negative_binomial,none,Number of chasing events
+chasing_mean_duration,chase,positive_continuous,s/event,chasing_count,gamma_or_log_LME,log_if_needed,Mean duration per chasing event
+chased_duration,chase,positive_continuous,s,time_window,gamma_or_log_LME,log_if_needed,Total duration spent being chased
+chased_count,chase,count,events,time_window,negative_binomial,none,Number of times being chased
+chased_mean_duration,chase,positive_continuous,s/event,chased_count,gamma_or_log_LME,log_if_needed,Mean duration per chased event
+chasing_duration_fraction,chase,proportion,fraction,time_window,beta_or_fraction_model,none,Fraction of time spent chasing
+chasing_event_rate,chase,rate,events/s,time_window,negative_binomial_with_offset,none,Chasing events per unit time
+chased_duration_fraction,chase,proportion,fraction,time_window,beta_or_fraction_model,none,Fraction of time spent being chased
+chased_event_rate,chase,rate,events/s,time_window,negative_binomial_with_offset,none,Chased events per unit time
+chasing_duration_ratio,chase,ratio,ratio,chased_duration,LME_if_stable,log_if_needed,Chasing duration relative to chased duration
+chased_duration_ratio,chase,ratio,ratio,chasing_duration,LME_if_stable,log_if_needed,Chased duration relative to chasing duration
+chasing_event_ratio,chase,ratio,ratio,chased_count,LME_if_stable,log_if_needed,Chasing event count relative to chased event count
+chased_event_ratio,chase,ratio,ratio,chasing_count,LME_if_stable,log_if_needed,Chased event count relative to chasing event count
+normDS,hierarchy,continuous,normalized_score,,LME,none,Continuous hierarchy score underlying rank; calculated per mouse and phase
+rank,hierarchy,ordinal,alpha_beta_gamma_delta,,ordinal_mixed_model,none,Ordinal social hierarchy rank; alpha > beta > gamma > delta
+total_distance,locomotion,continuous,m,,LME,none,Total distance traveled during valid locomotion observations
+valid_locomotion_duration,locomotion,continuous,s,time_window,LME_or_beta,none,Duration for which locomotion was valid/measurable; equivalent to valid outside-nest locomotion observation time
+mean_speed,locomotion,continuous,m/s,valid_locomotion_duration,LME,none,Mean speed during valid locomotion observations
+median_speed,locomotion,continuous,m/s,valid_locomotion_duration,LME,none,Median speed during valid locomotion observations
+mean_abs_angular_velocity,locomotion,positive_continuous,rad/s,valid_locomotion_duration,LME_or_gamma,log_if_needed,Mean absolute angular velocity; measures turning intensity independent of turning direction
+mean_abs_acceleration,locomotion,positive_continuous,m/s2,valid_locomotion_duration,LME_or_gamma,log_if_needed,Mean absolute acceleration during valid locomotion observations
+valid_locomotion_duration_fraction,locomotion,proportion,fraction,time_window,beta_or_fraction_model,none,Fraction of the time window with valid locomotion observations
+motionless_count,motionless,count,events,time_window,negative_binomial,none,Number of motionless bouts
+motionless_duration,motionless,positive_continuous,s,time_window,gamma_or_log_LME,log_if_needed,Total motionless duration
+motionless_mean_duration,motionless,positive_continuous,s/event,motionless_count,gamma_or_log_LME,log_if_needed,Mean duration per motionless bout
+motionless_duration_fraction,motionless,proportion,fraction,time_window,beta_or_fraction_model,none,Fraction of time spent motionless
+motionless_event_rate,motionless,rate,events/s,time_window,negative_binomial_with_offset,none,Motionless events per unit time
+speeding_count,speeding,count,events,time_window,negative_binomial,none,Number of speeding bouts
+speeding_duration,speeding,positive_continuous,s,time_window,gamma_or_log_LME,log_if_needed,Total speeding duration
+speeding_mean_duration,speeding,positive_continuous,s/event,speeding_count,gamma_or_log_LME,log_if_needed,Mean duration per speeding bout
+speeding_duration_fraction,speeding,proportion,fraction,time_window,beta_or_fraction_model,none,Fraction of time spent speeding
+speeding_event_rate,speeding,rate,events/s,time_window,negative_binomial_with_offset,none,Speeding events per unit time
+nest_frames,social,continuous,frames,,LME_or_count_like,none,Frames associated with nest/social occupancy measure
+weighted_sum,social,continuous,index,,LME_if_residuals_acceptable,none,Weighted social interaction/occupancy index
+alone_sum,social,continuous,frames_or_index,,LME_if_residuals_acceptable,none,Amount of time/frames classified as alone
+weighted_co_occupancy,social,continuous_or_proportion,index,,inspect_distribution,none,Weighted measure of co-occupancy
+alone_fraction,social,proportion,fraction,relevant_social_observation,beta_or_fraction_model,none,Fraction of relevant observation time classified as alone
+feeding_frames,social,continuous,frames,,LME_or_count_like,none,Total feeder-related frames
+drinking_frames,social,continuous,frames,,LME_or_count_like,none,Total water-related frames
+ramps_frames,social,continuous,frames,,LME_or_count_like,none,Total ramp-related frames
+s_wall_frames,social,continuous,frames,,LME_or_count_like,none,Total side-wall-related frames
+feeding_together_frames,social,continuous,frames,feeding_frames,binomial_or_fraction_model,none,Frames with multiple mice together at feeding
+feeding_alone_frames,social,continuous,frames,feeding_frames,binomial_or_fraction_model,none,Frames with mouse alone at feeding
+feeding_together_fraction,social,proportion,fraction,feeding_frames,binomial_or_fraction_model,none,Fraction of feeding frames spent together
+feeding_alone_fraction,social,proportion,fraction,feeding_frames,binomial_or_fraction_model,none,Fraction of feeding frames spent alone
+drinking_together_frames,social,continuous,frames,drinking_frames,binomial_or_fraction_model,none,Frames with multiple mice together at drinking
+drinking_alone_frames,social,continuous,frames,drinking_frames,binomial_or_fraction_model,none,Frames with mouse alone at drinking
+drinking_together_fraction,social,proportion,fraction,drinking_frames,binomial_or_fraction_model,none,Fraction of drinking frames spent together
+drinking_alone_fraction,social,proportion,fraction,drinking_frames,binomial_or_fraction_model,none,Fraction of drinking frames spent alone
+ramps_together_frames,social,continuous,frames,ramps_frames,binomial_or_fraction_model,none,Frames with multiple mice together at ramps
+ramps_alone_frames,social,continuous,frames,ramps_frames,binomial_or_fraction_model,none,Frames with mouse alone at ramps
+ramps_together_fraction,social,proportion,fraction,ramps_frames,binomial_or_fraction_model,none,Fraction of ramps frames spent together
+ramps_alone_fraction,social,proportion,fraction,ramps_frames,binomial_or_fraction_model,none,Fraction of ramps frames spent alone
+s_wall_together_frames,social,continuous,frames,s_wall_frames,binomial_or_fraction_model,none,Frames with multiple mice together at s_wall
+s_wall_alone_frames,social,continuous,frames,s_wall_frames,binomial_or_fraction_model,none,Frames with mouse alone at s_wall
+s_wall_together_fraction,social,proportion,fraction,s_wall_frames,binomial_or_fraction_model,none,Fraction of s_wall frames spent together
+s_wall_alone_fraction,social,proportion,fraction,s_wall_frames,binomial_or_fraction_model,none,Fraction of s_wall frames spent alone
