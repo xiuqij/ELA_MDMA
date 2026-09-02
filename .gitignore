@@ -23,4 +23,4 @@ archived_scripts/
 .DS_Store
 
 # do not track for now
-feature_metadata.*
+plot_hierarchies.py
