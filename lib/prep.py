@@ -81,6 +81,22 @@ def fill_no_event_nans(df):
     return df
 
 
+def clean_infinite(df):
+    """Replace +/-inf with NaN. A handful of rate/fraction columns (e.g. non_wall_event_rate,
+    ramp2_duration_fraction - worst at 1h resolution, a few persist at 2h/3h) are effectively
+    x/~0 when a mouse's observed time in a bin is ~zero, producing literal inf rather than NaN.
+    Left as inf, these poison compute_domain_scores()'s z-scoring: mean/std of the reference
+    group become NaN, silently NaN-ing that domain for EVERY mouse in the group, not just the
+    offending row. Treated as missing (like ratio/normDS/rank), not auto-zeroed the way the
+    *_duration_fraction/*_event_rate NaN convention would suggest, since 'no observed time to
+    measure from' isn't the same as 'zero events'.
+    """
+    df = df.copy()
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    df[num_cols] = df[num_cols].replace([np.inf, -np.inf], np.nan)
+    return df
+
+
 def add_derived_features(df):
     """Raw-feature-level derived columns used by multiple domain scores. Computed here (once,
     at load time) rather than inside domain_scores.py so they're available to any downstream
@@ -116,6 +132,7 @@ def load_data(female_path, male_path, drop_bad_blocks=True, fill_nans=True, verb
         df = drop_known_bad_blocks(df, verbose=verbose)
     if fill_nans:
         df = fill_no_event_nans(df)
+    df = clean_infinite(df)
     df = add_derived_features(df)
     return df
 
