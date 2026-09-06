@@ -1,13 +1,15 @@
 """
-NOTE: EVERYTHING WILL BE MOVED TO THE JUPYTER NOTEBOOK VERSION.
- 
+NOTE: 
+ARCHIVED. EVERYTHING HAS BEEN MOVED TO THE JUPYTER NOTEBOOK VERSION.
+"""
+""" 
 run_analysis.py - template/tutorial script showing the analysis flow end-to-end.
 
 This is NOT meant to be a final pipeline that produces and saves every possible output -
 it's a working template showing how the pieces (prep -> aggregate -> domain_scores ->
 stats_utils) fit together, with each stage kept as a separate, inspectable variable so you
 can modify or extend any step without touching the others. Copy sections of this into a
-notebook, or keep editing this file directly - either works with this structure.
+notebook, or keep editing this file directly.
 
 Flow:
     1. Load & subset data (with day/phase/time_point/sex/age filters)
@@ -19,7 +21,7 @@ Flow:
     7. Treatment effect x background: does ELA modulate the MDMA response (mixed model, 7.1),
        does MDMA move ELA animals toward the CTRL level (7.2), and what's the drug effect's
        time-course, small vs large windows (7.3)? See treatment_interaction.py.
-    8. <-- add more analyses here as you go
+    8. <-- add more analyses
 """
 #%%
 import sys
@@ -312,20 +314,20 @@ plot_delta_by_window_grid(
 #        Loads BOTH time_points with keep_day=True (day kept as its own axis, not averaged) so
 #        the z-scoring reference is baseline (same scale as 7.1-7.3) AND each day's shape within
 #        each session is visible - see temporal_dynamics.plot_session_trajectory().
-#        All core domains, wrapped into a grid, one figure per sex (12 domains is too wide for a
-#        single row - see plot_session_trajectory_grid()'s docstring).
+#        All core domains, wrapped into a grid with male/female panels side by side (shared
+#        y-axis scale per domain) rather than one figure per sex - see
+#        plot_session_trajectory_grid()'s docstring (pair_sexes=True).
 # ----------------------------------------------------------------------------
 full_traj_by_window = load_temporal_data(RESOLUTION, domain_defs=CORE_DOMAINS,
                                           time_points=['baseline', 'MDMA'], data_path=DATA_PATH,
                                           keep_day=True)
 
-for sex in ['female', 'male']:
-    plot_session_trajectory_grid(
-        full_traj_by_window, CORE_DOMAIN_FEATURES, sex=sex, group='condition', ncols=3,
-        title=f'{sex}: BASELINE -> POST-INJECTION domain-score trajectory by condition '
-              f'({RESOLUTION} bins)',
-        save_path=os.path.join(savepath_tx, f'treatment_session_trajectory_{sex}_{RESOLUTION}.png'),
-    )
+plot_session_trajectory_grid(
+    full_traj_by_window, CORE_DOMAIN_FEATURES, sexes=('female', 'male'), group='condition',
+    pair_sexes=True,
+    title=f'BASELINE -> POST-INJECTION domain-score trajectory by condition ({RESOLUTION} bins)',
+    save_path=os.path.join(savepath_tx, f'treatment_session_trajectory_{RESOLUTION}.png'),
+)
 
 #%%
 # ----------------------------------------------------------------------------
@@ -380,8 +382,7 @@ plot_domains_by_box_grid(
 # ============================================================================
 # 8. ADD MORE HERE
 # ============================================================================
-# Ideas already discussed that aren't wired up as reusable functions yet - feel free to build
-# these out using the building blocks above:
+# Ideas already discussed that aren't wired up as reusable functions yet
 #   - age-split analysis: filter_data(..., age='P35') vs age='P42', then repeat steps 2-4
 #   - individual stratification / clustering (dominance x social quadrants, k-means on the
 #     full domain-score vector) - see chat history for example code, not yet in lib/
