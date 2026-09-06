@@ -12,7 +12,7 @@ just in the aggregate (stats_utils.box_level_delta_table / treatment_interaction
 
 Usage - import into run_analysis.py:
 
-    from plot_by_box import plot_domains_by_box_grid, top_panels_by_effect
+    from plot_by_box import plot_domains_by_box_grid, plot_all_domains_grid, top_panels_by_effect
 
     # baseline (step 4.1) - single color per sex, no further split:
     panels = top_panels_by_effect(baseline_effect_tables, n_per_sex=3)
@@ -22,9 +22,19 @@ Usage - import into run_analysis.py:
     plot_domains_by_box_grid(wide_post, panels, group_col='treatment',
         title='POST-INJECTION: ELA vs CTRL, box-level detail, by treatment')
 
+    # same domain, female then male side by side - shared y-axis per domain for direct comparison:
+    panels = [(feat, sex) for feat in CORE_DOMAIN_FEATURES for sex in ('female', 'male')]
+    plot_domains_by_box_grid(wide, panels, match_ylim_by_domain=True)
+
+    # every core (or all) domain, one grid per sex, saved separately:
+    from domain_scores import CORE_DOMAIN_FEATURES
+    plot_all_domains_grid(wide, CORE_DOMAIN_FEATURES, title='BASELINE: ELA vs CTRL, box-level detail',
+        save_path='figures/baseline_core_domains.png')
+
 Standalone: `python plot_by_box.py` reproduces run_analysis.py steps 1-4 and shows an example
 grid (no save) - smoke test.
 """
+import math
 import os
 import numpy as np
 import pandas as pd
@@ -55,7 +65,7 @@ def top_panels_by_effect(effect_tables, n_per_sex=3, rank_col='p_fdr'):
     return panels
 
 
-def plot_domain_by_box(wide, feature, sex=None, ax=None, pair_values=('ELA', 'CTRL'),
+def plot_domain_by_box(wide, feature, sex=None, ax=None, pair_values=('CTRL', 'ELA'),
                         value_suffix='', group_col=None, group_colors=None, default_color=None,
                         annotate_stats=True, title=None):
     """One panel: paired dot-line plot for one domain, one line per box.
@@ -146,15 +156,22 @@ def plot_domain_by_box(wide, feature, sex=None, ax=None, pair_values=('ELA', 'CT
 def plot_domains_by_box_grid(wide, panels, group_col=None, group_colors=None, value_suffix='',
                               annotate_stats=True, title=None,
                               ylabel='z-scored composite (per-box mean)',
+                              match_ylim_by_domain=False,
                               save_path=None, show=True, dpi=150):
     """Row of panels via plot_domain_by_box(), one per (feature, sex) pair in `panels`.
 
     Args:
         wide: box_paired_wide() output covering all sexes/groups needed by `panels`.
         panels: list of (feature, sex) tuples - e.g. from top_panels_by_effect(), or a curated
-            list built by hand.
+            list built by hand (e.g. the same domain for 'female' then 'male' side by side, to
+            compare sexes directly).
         group_col / group_colors: passed through to every panel - see plot_domain_by_box().
         value_suffix: passed through to every panel - see plot_domain_by_box() (e.g. '__delta').
+        match_ylim_by_domain: if True, panels sharing the same `feature` (e.g. a male/female
+            pair for the same domain placed side by side) are given a common y-axis range - the
+            union of their individual auto-scaled ranges - so the two sexes are directly
+            comparable at a glance instead of each getting its own scale. No effect on panels
+            whose feature is unique among `panels`.
         save_path: if given, saves the figure there (parent dir created if needed).
 
     Returns: (fig, axes)
@@ -169,6 +186,17 @@ def plot_domains_by_box_grid(wide, panels, group_col=None, group_colors=None, va
                             annotate_stats=annotate_stats)
         if ax is axes[0] and ylabel:
             ax.set_ylabel(ylabel)
+
+    if match_ylim_by_domain:
+        feat_axes = {}
+        for ax, (feat, sex) in zip(axes, panels):
+            feat_axes.setdefault(feat, []).append(ax)
+        for feat, axs in feat_axes.items():
+            if len(axs) > 1:
+                lo = min(a.get_ylim()[0] for a in axs)
+                hi = max(a.get_ylim()[1] for a in axs)
+                for a in axs:
+                    a.set_ylim(lo, hi)
 
     if group_col is not None:
         handles, labels = axes[0].get_legend_handles_labels()
@@ -190,6 +218,78 @@ def plot_domains_by_box_grid(wide, panels, group_col=None, group_colors=None, va
     if show:
         plt.show()
     return fig, axes
+
+
+def plot_all_domains_grid(wide, domains, sexes=('female', 'male'), group_col=None,
+                           group_colors=None, value_suffix='', annotate_stats=True, ncols=None,
+                           title=None, ylabel='z-scored composite (per-box mean)',
+                           save_path=None, show=True, dpi=150):
+    """Every domain in `domains` (e.g. CORE_DOMAIN_FEATURES or ALL_DOMAIN_FEATURES from
+    domain_scores.py), one panel each via plot_domain_by_box(), arranged in a wrapped grid
+    (rather than plot_domains_by_box_grid()'s single row) so it stays readable on screen even
+    for a dozen+ domains. One figure per sex, saved separately.
+
+    Args:
+        wide: box_paired_wide() output covering all sexes/groups needed.
+        domains: list of feature names to plot, one panel each - e.g. CORE_DOMAIN_FEATURES or
+            ALL_DOMAIN_FEATURES from domain_scores.py, or any curated subset.
+        sexes: sexes to make one figure for each of.
+        group_col / group_colors: passed through to every panel - see plot_domain_by_box().
+        value_suffix: passed through to every panel - see plot_domain_by_box() (e.g. '__delta').
+        ncols: panels per row; defaults to min(6, len(domains)) so rows stay wide but not
+            unreadably so, wrapping into as many rows as needed.
+        title: figure suptitle; the sex is appended automatically (e.g. 'BASELINE (female)').
+        save_path: if given, saves one file per sex (parent dir created if needed) - the sex is
+            inserted before the extension, e.g. 'out/domains.png' -> 'out/domains_female.png' /
+            'out/domains_male.png'.
+
+    Returns: {sex: (fig, axes)}
+    """
+    n = len(domains)
+    if ncols is None:
+        ncols = min(6, n)
+    nrows = math.ceil(n / ncols)
+
+    if save_path:
+        root, ext = os.path.splitext(save_path)
+        os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+
+    results = {}
+    for sex in sexes:
+        fig, axes = plt.subplots(nrows, ncols, figsize=(2.7 * ncols, 4.4 * nrows), squeeze=False)
+        flat = axes.flatten()
+
+        for ax, feat in zip(flat, domains):
+            plot_domain_by_box(wide, feat, sex=sex, ax=ax, group_col=group_col,
+                                group_colors=group_colors, value_suffix=value_suffix,
+                                annotate_stats=annotate_stats)
+        for ax in flat[n:]:
+            ax.axis('off')
+        if ylabel:
+            for row in axes:
+                row[0].set_ylabel(ylabel)
+
+        if group_col is not None:
+            handles, labels = flat[0].get_legend_handles_labels()
+            seen = {}
+            for h, l in zip(handles, labels):
+                if l and l not in seen:
+                    seen[l] = h
+            if seen:
+                fig.legend(seen.values(), seen.keys(), loc='lower center', ncol=len(seen),
+                           frameon=False, fontsize=10, bbox_to_anchor=(0.5, -0.02 / nrows))
+
+        sex_title = f'{title} ({sex})' if title else sex
+        fig.suptitle(sex_title, color=COLOR_INK, fontsize=12, fontweight='bold', y=1.0 + 0.02 / nrows)
+        plt.tight_layout(rect=(0, 0.03 / nrows, 1, 1) if group_col is not None else (0, 0, 1, 1))
+
+        if save_path:
+            sex_path = f'{root}_{sex}{ext}'
+            fig.savefig(sex_path, dpi=dpi, bbox_inches='tight')
+        if show:
+            plt.show()
+        results[sex] = (fig, axes)
+    return results
 
 
 #%%
