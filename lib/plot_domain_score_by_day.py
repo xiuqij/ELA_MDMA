@@ -17,7 +17,9 @@ in step 5 ("EXPLORE BY DAY"):
     fig, ax = plt.subplots(figsize=(3.2, 4.3))
     plot_domain_score_by_day(wide_by_day, 'nest_occupancy_score', 'male', ax=ax)
 
-    # or, several domains x both sexes in one reference grid:
+    # or, several domains x both sexes in one reference grid (wraps into extra rows if
+    # `features` is long; use pair_sexes=True to put male/female side by side per domain
+    # with a shared y-axis scale instead of stacking them in separate rows):
     plot_domain_scores_by_day_grid(
         wide_by_day, CORE_DOMAIN_FEATURES,
         title='BASELINE: ELA vs CTRL, domain scores by day (box-paired)',
@@ -31,6 +33,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 from stats_utils import paired_effect_table
 
@@ -106,38 +109,135 @@ def plot_domain_score_by_day(wide_by_day, feature, sex, ax=None, day_col='day',
     return ax
 
 
+def _add_shared_legend(fig, sexes, y):
+    """Single figure-level legend (CTRL + one ELA entry per sex), placed at figure-fraction
+    height `y`, instead of an awkward legend sitting inside one panel."""
+    handles = [Line2D([0], [0], color=COLOR_CTRL, marker='o', lw=2.2, markersize=7, label='CTRL')]
+    for sex in sexes:
+        handles.append(Line2D([0], [0], color=SEX_COLORS.get(sex, '#e34948'), marker='s',
+                               lw=2.2, markersize=7, label=f'ELA ({sex})'))
+    fig.legend(handles=handles, loc='center', bbox_to_anchor=(0.5, y),
+               ncol=len(handles), frameon=False, fontsize=8.5)
+
+
+def _auto_max_cols(n_items, small_threshold, min_cols):
+    """Pick a column count that keeps the grid roughly square once n_items exceeds
+    small_threshold, instead of always laying everything out in one long row."""
+    if n_items <= small_threshold:
+        return n_items
+    return max(min_cols, int(np.ceil(np.sqrt(n_items))))
+
+
 def plot_domain_scores_by_day_grid(wide_by_day, features, sexes=('female', 'male'), day_col='day',
                                     show_individual_boxes=False, annotate_stats=True,
+                                    pair_sexes=False, max_cols=None, legend_loc='top',
                                     title=None, save_path=None, show=True, dpi=150):
-    """Reference grid: one row per sex, one column per feature, each panel via
-    plot_domain_score_by_day(). Shared legend, shared y-label per row.
+    """Reference grid of plot_domain_score_by_day() panels, one per feature x sex.
+
+    Two layouts are available:
+
+    - pair_sexes=False (default): one row per sex, one column per feature (as before).
+      When `features` is long, the columns wrap into additional row-groups (stacked
+      vertically, len(sexes) rows per group) instead of producing one very wide row,
+      with `max_cols` (or an automatic sqrt(n)-based choice) controlling the wrap width.
+    - pair_sexes=True: requires exactly two sexes. Each feature gets its own male/female
+      pair of panels placed side by side, y-axis matched across the pair so the two
+      trajectories are directly comparable, with the female panel's y tick labels
+      suppressed since it shares the male panel's scale. Feature-pairs wrap into a grid
+      the same way when there are many features.
 
     Args:
         wide_by_day: see plot_domain_score_by_day().
-        features: list of domain-score column names, left-to-right column order.
-        sexes: top-to-bottom row order (default female, male).
+        features: list of domain-score column names.
+        sexes: sex order (default female, male). Must have length 2 if pair_sexes=True.
+        pair_sexes: if True, plot each feature's two sexes side by side with a shared
+            y-axis scale instead of stacking sexes in separate rows.
+        max_cols: max number of feature columns (pair_sexes=False) or feature-pair
+            blocks (pair_sexes=True) per row before wrapping. Auto-chosen if None.
+        legend_loc: 'top' or 'bottom' to place a single shared legend above/below the
+            whole grid, or None to omit it.
         save_path: if given, saves the figure there (parent dir created if needed).
         show: whether to call plt.show() (default True; set False for non-interactive use).
 
     Returns: (fig, axes)
     """
-    fig, axes = plt.subplots(len(sexes), len(features),
-                              figsize=(2.6 * len(features), 3.9 * len(sexes)), squeeze=False)
+    n_feat = len(features)
 
-    for row, sex in enumerate(sexes):
-        for col, feat in enumerate(features):
-            ax = axes[row, col]
-            plot_domain_score_by_day(wide_by_day, feat, sex, ax=ax, day_col=day_col,
+    if pair_sexes:
+        if len(sexes) != 2:
+            raise ValueError('pair_sexes=True requires exactly two sexes')
+        sex_left, sex_right = sexes
+
+        ncols_blocks = min(n_feat, max_cols or _auto_max_cols(n_feat, small_threshold=4, min_cols=2))
+        nrows_blocks = int(np.ceil(n_feat / ncols_blocks))
+
+        fig, axes = plt.subplots(nrows_blocks, ncols_blocks * 2,
+                                  figsize=(2.0 * ncols_blocks * 2, 3.9 * nrows_blocks), squeeze=False)
+
+        for i, feat in enumerate(features):
+            row, col_block = divmod(i, ncols_blocks)
+            ax_left, ax_right = axes[row, col_block * 2], axes[row, col_block * 2 + 1]
+
+            plot_domain_score_by_day(wide_by_day, feat, sex_left, ax=ax_left, day_col=day_col,
                                       show_individual_boxes=show_individual_boxes,
                                       annotate_stats=annotate_stats)
-            ax.set_title(_domain_label(feat), fontsize=9) if row == 0 else ax.set_title('')
-            if col == 0:
-                ax.set_ylabel(f'{sex}\nz-score', fontsize=9)
+            plot_domain_score_by_day(wide_by_day, feat, sex_right, ax=ax_right, day_col=day_col,
+                                      show_individual_boxes=show_individual_boxes,
+                                      annotate_stats=annotate_stats)
 
-    axes[0, -1].legend(fontsize=7, loc='upper right')
+            ylo = min(ax_left.get_ylim()[0], ax_right.get_ylim()[0])
+            yhi = max(ax_left.get_ylim()[1], ax_right.get_ylim()[1])
+            ax_left.set_ylim(ylo, yhi)
+            ax_right.set_ylim(ylo, yhi)
+            ax_right.tick_params(labelleft=False)
+
+            domain_label = _domain_label(feat)
+            ax_left.set_title(f'{domain_label}\n{sex_left}', fontsize=8.5)
+            ax_right.set_title(f'{domain_label}\n{sex_right}', fontsize=8.5)
+            if col_block == 0:
+                ax_left.set_ylabel('z-score', fontsize=9)
+
+        for i in range(n_feat, nrows_blocks * ncols_blocks):
+            row, col_block = divmod(i, ncols_blocks)
+            axes[row, col_block * 2].axis('off')
+            axes[row, col_block * 2 + 1].axis('off')
+
+    else:
+        ncols = min(n_feat, max_cols or _auto_max_cols(n_feat, small_threshold=6, min_cols=3))
+        n_groups = int(np.ceil(n_feat / ncols))
+        nrows = n_groups * len(sexes)
+
+        fig, axes = plt.subplots(nrows, ncols, figsize=(2.6 * ncols, 3.9 * nrows), squeeze=False)
+
+        for group in range(n_groups):
+            feats_in_group = features[group * ncols:(group + 1) * ncols]
+            for row_offset, sex in enumerate(sexes):
+                r = group * len(sexes) + row_offset
+                for col, feat in enumerate(feats_in_group):
+                    ax = axes[r, col]
+                    plot_domain_score_by_day(wide_by_day, feat, sex, ax=ax, day_col=day_col,
+                                              show_individual_boxes=show_individual_boxes,
+                                              annotate_stats=annotate_stats)
+                    ax.set_title(_domain_label(feat), fontsize=9) if row_offset == 0 else ax.set_title('')
+                    if col == 0:
+                        ax.set_ylabel(f'{sex}\nz-score', fontsize=9)
+                for col in range(len(feats_in_group), ncols):
+                    axes[r, col].axis('off')
+
+    top_pad, bottom_pad, title_y, legend_y = 0.0, 0.0, 1.02, None
+    if legend_loc == 'top':
+        top_pad, legend_y = (0.12, 0.935) if title else (0.07, 0.965)
+        title_y = 0.99
+    elif legend_loc == 'bottom':
+        bottom_pad, legend_y = 0.07, 0.015
+        if title:
+            top_pad, title_y = 0.06, 0.99
+
+    plt.tight_layout(rect=(0, bottom_pad, 1, 1 - top_pad))
     if title:
-        fig.suptitle(title, color=COLOR_INK, fontsize=12, fontweight='bold', y=1.02)
-    plt.tight_layout()
+        fig.suptitle(title, color=COLOR_INK, fontsize=12, fontweight='bold', y=title_y)
+    if legend_loc:
+        _add_shared_legend(fig, sexes, legend_y)
 
     if save_path:
         os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
