@@ -214,7 +214,105 @@ def normalize_by_nest(df,nest_df,group_cols=['day','phase','box','mouse','time_b
     df['event_rate'] = df['count'] / df['outside_nest_duration']
     return df
 
-def get_summary_stats(raw_df, 
+def split_events_by_interval_with_frame(df, interval_minutes=60, fps=25):
+    """
+    Generalized version of split_events_by_hour_with_frame: split events at real
+    clock boundaries every `interval_minutes` (e.g. 15, 30, 60) instead of only
+    whole clock-hour boundaries. interval_minutes must evenly divide 60.
+    """
+
+    rows = []
+
+    for r in df.itertuples():
+
+        current_start = r.event_start
+        final_end = r.event_end
+
+        current_start_frame = r.start_frame
+        final_end_frame = r.end_frame
+
+        while current_start < final_end:
+
+            boundary_minute = ((current_start.minute // interval_minutes) + 1) * interval_minutes
+            next_boundary = (
+                current_start.replace(minute=0, second=0, microsecond=0)
+                + pd.Timedelta(minutes=boundary_minute)
+            )
+
+            segment_end = min(final_end, next_boundary)
+
+            frames_to_boundary = round(
+                (segment_end - current_start).total_seconds() * fps
+            )
+
+            segment_start_frame = current_start_frame
+            segment_end_frame = min(
+                current_start_frame + frames_to_boundary,
+                final_end_frame
+            )
+
+            rows.append({
+                "mouse": r.mouse,
+                "video": r.video,
+                "date": r.date,
+                "box": r.box,
+
+                "event_start": current_start,
+                "event_end": segment_end,
+
+                "start_frame": segment_start_frame,
+                "end_frame": segment_end_frame,
+
+                "duration_f": segment_end_frame - segment_start_frame
+            })
+
+            current_start_frame = segment_end_frame
+            current_start = segment_end
+
+    return pd.DataFrame(rows)
+
+def add_fine_time_labels(df):
+    '''Same labels as add_time_labels, plus ZT_time (float hours, includes minutes) so
+    timebins finer than 1h can be computed - add_time_labels's ZT_hour is truncated to
+    whole hours and can't distinguish e.g. 14:10 from 14:50.'''
+    df = add_time_labels(df)
+    df["ZT_time"] = df["ZT_hour"] + df["event_start"].dt.minute / 60
+    return df
+
+def add_timebin_labels_fine(df, resolution):
+    '''
+    Same formula/output columns as add_timebin_labels, but keyed on the fractional
+    ZT_time instead of the integer ZT_hour, so resolution < 1 (0.25, 0.5) works.
+    '''
+    df['time_bin'] = (
+        ((df['ZT_time'] // resolution) + 1) * resolution
+    )
+
+    df['time_window'] = (
+        (df['time_bin'] - resolution).round(2).astype(str)
+        + '-'
+        + (df['time_bin']).round(2).astype(str)
+    )
+    return df
+
+def convert_to_resolution(df_4h, interval_minutes=15, fps=25, start_col='start_frame', end_col='end_frame',
+                          keep_cols=['video','mouse','box','duration_f','event_start', 'event_end', 'date','day','CT_hour','ZT_day','ZT_hour','ZT_time','phase']):
+    '''Same as convert_to_1h but splits at interval_minutes boundaries (e.g. 15) instead
+    of whole clock hours, and carries the fractional ZT_time label needed for sub-hour
+    regrouping.'''
+    df_4h = compute_event_times(df_4h, fps=fps,start_col=start_col,end_col=end_col)
+    df_fine = split_events_by_interval_with_frame(df_4h, interval_minutes=interval_minutes, fps=fps)
+    df_fine = add_fine_time_labels(df_fine)
+    df_fine = add_day_order(df_fine)
+    return df_fine[keep_cols]
+
+def format_resolution(resolution):
+    '''0.25 -> "15min", 0.5 -> "30min", 1 -> "1h", 2 -> "2h", ...'''
+    if resolution < 1:
+        return f"{int(round(resolution*60))}min"
+    return f"{int(resolution)}h"
+
+def get_summary_stats(raw_df,
                       fps = 25, 
                       group_by = 'hour',
                       nest=False,nest_df= None, 
