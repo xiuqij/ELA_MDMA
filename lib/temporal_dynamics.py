@@ -44,7 +44,10 @@ trend IS the thing being plotted, so a pooled reference keeps it visible instead
 A third view, plot_session_trajectory()/plot_session_trajectory_grid(), puts BOTH sessions in one
 panel: baseline days 1-3, a visual break at the treatment boundary, then post-injection days 1-3
 - the full arc in one picture rather than two separate plots. Load with time_points=('baseline',
-'MDMA') and keep_day=True for this.
+'MDMA') and keep_day=True for this. Pass baseline_group='background' to collapse just the
+baseline block to the 2-way CTRL/ELA split (no treatment has happened yet, so splitting it by
+`group` - typically 'condition', 4-way - there too is not meaningful) while the post-injection
+block keeps the full split.
 
 Both grid functions (plot_temporal_grid, plot_session_trajectory_grid) wrap long feature lists
 into extra row-groups automatically (or via `max_cols`) instead of one very wide row, accept
@@ -462,7 +465,7 @@ def plot_temporal_grid(data, features, sexes=('female', 'male'), group='backgrou
     return fig, axes
 
 
-def plot_session_trajectory(data, feature, sex, ax, group='condition',
+def plot_session_trajectory(data, feature, sex, ax, group='condition', baseline_group=None,
                              session_order=('baseline', 'MDMA'), time_point_col='time_point',
                              day_col='day', window_col='time_window', gap=1.2, show_legend=True,
                              sex_suffix=None):
@@ -471,56 +474,70 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition',
     (MDMA) days 1-3 on the right - same within-day (day, time_window) x-axis logic as
     plot_temporal()'s multi-day mode, just placed in two side-by-side blocks (one per session)
     instead of overlaid on the same x-axis, since the two sessions are different points in time,
-    not two readings of the same window.
+    not two readings of the same window. Each block's x-tick labels are the actual `time_window`
+    values for its own days (e.g. '12-16', '16-20', ...), not a running bin count, so the same
+    label always means the same time of day on both sides of the break.
 
     Input: `data` - output of load_temporal_data(..., time_points=session_order, keep_day=True).
     Z-scoring should be baseline-referenced (load_temporal_data's default) so 0 means "typical
     baseline" on BOTH sides of the break, making the jump at the treatment boundary meaningful.
 
-    group='condition' (default) is the natural choice here since both treatment arms are in play
-    across the break - styled via TREATMENT_STYLE (saline fainter/dashed, MDMA solid), color by
-    background, CONSTANT across the break so e.g. the ELA_MDMA line reads as the same group on
-    both sides, just discontinuous. group='background' also works (2 lines, plain solid) if you
-    don't need the treatment split.
+    group='condition' (default) is the natural choice for the post-injection block(s) since both
+    treatment arms are in play there - styled via TREATMENT_STYLE (saline fainter/dashed, MDMA
+    solid), color by background, CONSTANT across the break so e.g. the ELA_MDMA line reads as the
+    same group on both sides, just discontinuous. group='background' also works (2 lines, plain
+    solid) if you don't need the treatment split anywhere.
+
+    baseline_group: if given, overrides `group` for the FIRST session in `session_order` only
+        (baseline, by convention) - e.g. baseline_group='background' collapses that block to the
+        2-way CTRL/ELA split instead of the 4-way background x treatment split, since at baseline
+        no drug has been given yet and a box's FUTURE treatment assignment splitting it into
+        CTRL_saline/CTRL_MDMA (or ELA_saline/ELA_MDMA) there is not a meaningful distinction.
+        Colors still line up across the break either way (both palettes color CTRL grey and ELA
+        by sex - see GROUP_PALETTES); the legend simply gains extra entries for the baseline-only
+        lines when `baseline_group` differs from `group`. None (default) keeps `group` uniform
+        across the whole trajectory, matching the previous behavior.
 
     sex_suffix: see plot_temporal() - appended to sex-VARIANT group labels only ('ELA' side),
     for use from a grid sharing one legend across sexes (plot_session_trajectory_grid).
 
     Returns: ax
     """
-    if group not in GROUP_ORDERS:
-        raise ValueError(f"group must be one of {list(GROUP_ORDERS)}, got {group!r}")
+    for g in (group, baseline_group):
+        if g is not None and g not in GROUP_ORDERS:
+            raise ValueError(f"group must be one of {list(GROUP_ORDERS)}, got {g!r}")
     sub_sex = data[data.sex == sex]
-    order = [g for g in GROUP_ORDERS[group] if g in sub_sex[group].unique()]
-    palette = GROUP_PALETTES[group](sex)
 
-    blocks = []  # (session, day_windows, xs)
+    blocks = []  # (session, group_for_session, day_windows, xs)
     x0 = 0
-    for sess in session_order:
+    for i, sess in enumerate(session_order):
         sess_sub = sub_sex[sub_sex[time_point_col] == sess]
         if not len(sess_sub):
             continue
+        sess_group = baseline_group if (baseline_group is not None and i == 0) else group
         dw = ordered_day_windows(sess_sub, day_col, window_col)
-        xs = [x0 + i for i in range(len(dw))]
-        blocks.append((sess, dw, xs))
+        xs = [x0 + j for j in range(len(dw))]
+        blocks.append((sess, sess_group, dw, xs))
         x0 = xs[-1] + 1 + gap if xs else x0
 
-    for grp in order:
-        color = palette[grp]
-        if group == 'condition':
-            _, treat = grp.split('_', 1)
-            style = TREATMENT_STYLE.get(treat, dict(marker='o', ls='-', alpha=0.9))
-        else:
-            style = dict(marker='o', ls='-', alpha=0.9)
-        label = f'{grp} ({sex_suffix})' if sex_suffix and _is_sex_variant_group(grp) else grp
-        for sess, dw, xs in blocks:
-            d = sub_sex[(sub_sex[group] == grp) & (sub_sex[time_point_col] == sess)]
-            g = d.groupby([day_col, window_col])[feature].agg(['mean', 'sem']).reindex(dw)
-            ax.errorbar(xs, g['mean'], yerr=g['sem'], color=color, capsize=3, lw=2, markersize=5,
-                        label=label, **style)
+    for sess, sess_group, dw, xs in blocks:
+        order = [g for g in GROUP_ORDERS[sess_group] if g in sub_sex[sess_group].unique()]
+        palette = GROUP_PALETTES[sess_group](sex)
+        for grp in order:
+            color = palette[grp]
+            if sess_group == 'condition':
+                _, treat = grp.split('_', 1)
+                style = TREATMENT_STYLE.get(treat, dict(marker='o', ls='-', alpha=0.9))
+            else:
+                style = dict(marker='o', ls='-', alpha=0.9)
+            label = f'{grp} ({sex_suffix})' if sex_suffix and _is_sex_variant_group(grp) else grp
+            d = sub_sex[(sub_sex[sess_group] == grp) & (sub_sex[time_point_col] == sess)]
+            g_stats = d.groupby([day_col, window_col])[feature].agg(['mean', 'sem']).reindex(dw)
+            ax.errorbar(xs, g_stats['mean'], yerr=g_stats['sem'], color=color, capsize=3, lw=2,
+                        markersize=5, label=label, **style)
 
     all_xs, all_labels = [], []
-    for sess, dw, xs in blocks:
+    for sess, sess_group, dw, xs in blocks:
         all_xs += xs
         all_labels += [w for _, w in dw]
         days_seen = sorted({d for d, _ in dw})
@@ -536,7 +553,7 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition',
                     ha='center', va='top', fontsize=6, color=COLOR_MUTED)
 
     if len(blocks) == 2:
-        break_x = (blocks[0][2][-1] + blocks[1][2][0]) / 2
+        break_x = (blocks[0][3][-1] + blocks[1][3][0]) / 2
         ax.axvline(break_x, color=COLOR_INK, lw=1.3, alpha=0.5, zorder=2)
         ax.text(break_x, 0.5, ' treatment ', transform=ax.get_xaxis_transform(), rotation=90,
                 ha='center', va='center', fontsize=6.5, color=COLOR_INK, alpha=0.8,
@@ -544,7 +561,7 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition',
 
     ax.set_xticks(all_xs)
     ax.set_xticklabels(all_labels, fontsize=6, rotation=90)
-    ax.set_xlabel(f'Zeitgeber time, ZT (h), by day ({" | ".join(session_order)})', fontsize=7.5)
+    ax.set_xlabel(f'time_window (ZT, h), by day ({" | ".join(session_order)})', fontsize=7.5)
     ax.axhline(0, color=COLOR_MUTED, lw=0.5, ls=':', zorder=0)
     ax.set_title(_domain_label(feature), fontsize=10.5)
     if show_legend:
@@ -557,7 +574,7 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition',
     return ax
 
 
-def plot_session_trajectory_grid(data, features, sexes, group='condition',
+def plot_session_trajectory_grid(data, features, sexes, group='condition', baseline_group=None,
                                   session_order=('baseline', 'MDMA'), pair_sexes=False,
                                   max_cols=None, legend_loc='top', title=None, save_path=None,
                                   show=True, dpi=150):
@@ -569,6 +586,12 @@ def plot_session_trajectory_grid(data, features, sexes, group='condition',
     a tuple of sexes. Domain scores are z-scored per sex (and the ELA color itself is
     sex-specific - see SEX_ELA_COLORS), so comparing sexes only makes sense on this
     z-scored axis, which pair_sexes below takes advantage of.
+
+    baseline_group: passed straight through to plot_session_trajectory() - set to 'background'
+        to collapse the baseline block of every panel to the 2-way CTRL/ELA split instead of
+        following `group` (typically 'condition', 4-way) there too. See plot_session_trajectory's
+        docstring for why that split makes more sense at baseline. None (default) keeps `group`
+        uniform across the whole trajectory.
 
     Two layouts when `sexes` has more than one entry:
     - pair_sexes=False (default): one row per sex, columns wrap into extra row-groups
@@ -605,11 +628,11 @@ def plot_session_trajectory_grid(data, features, sexes, group='condition',
             row, col_block = divmod(i, ncols_blocks)
             ax_left, ax_right = axes[row, col_block * 2], axes[row, col_block * 2 + 1]
             plot_session_trajectory(data, feat, sex_left, ax_left, group=group,
-                                     session_order=session_order, show_legend=False,
-                                     sex_suffix=sex_left)
+                                     baseline_group=baseline_group, session_order=session_order,
+                                     show_legend=False, sex_suffix=sex_left)
             plot_session_trajectory(data, feat, sex_right, ax_right, group=group,
-                                     session_order=session_order, show_legend=False,
-                                     sex_suffix=sex_right)
+                                     baseline_group=baseline_group, session_order=session_order,
+                                     show_legend=False, sex_suffix=sex_right)
 
             ylo = min(ax_left.get_ylim()[0], ax_right.get_ylim()[0])
             yhi = max(ax_left.get_ylim()[1], ax_right.get_ylim()[1])
@@ -640,6 +663,7 @@ def plot_session_trajectory_grid(data, features, sexes, group='condition',
                 for col, feat in enumerate(feats_in_group):
                     ax = axes[r, col]
                     plot_session_trajectory(data, feat, sex, ax, group=group,
+                                             baseline_group=baseline_group,
                                              session_order=session_order, show_legend=False,
                                              sex_suffix=sex if len(sexes) > 1 else None)
                     ax.set_title(_domain_label(feat) if row_offset == 0 else '', fontsize=9)
@@ -738,4 +762,12 @@ if __name__ == '__main__':
         full_traj_6h, CORE_DOMAIN_FEATURES[:6], sexes=('female', 'male'), group='condition',
         pair_sexes=True, legend_loc='bottom',
         title='BASELINE -> POST-INJECTION trajectory, male vs female side by side '
+              '(6h bins, smoke test)')
+
+    # baseline_group='background': baseline block collapses to CTRL vs ELA (2 lines) while the
+    # post-injection block keeps the full 4-way condition split.
+    plot_session_trajectory_grid(
+        full_traj_6h, CORE_DOMAIN_FEATURES[:4], sexes=('female', 'male'), group='condition',
+        baseline_group='background',
+        title='BASELINE (CTRL/ELA only) -> POST-INJECTION (by condition) trajectory '
               '(6h bins, smoke test)')
