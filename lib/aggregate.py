@@ -73,8 +73,19 @@ def mouse_level_deltas(df, features, id_cols, session_col='time_point',
     piv = df.pivot_table(index=id_cols, columns=session_col, values=features)
     piv.columns = [f'{feat}__{sess}' for feat, sess in piv.columns]
     a, b = session_values
-    need_cols = [f'{feat}__{a}' for feat in features] + [f'{feat}__{b}' for feat in features]
+    # pivot_table silently omits a feature that is entirely NaN across this subset - e.g. a domain
+    # whose robust z-score is undefined here because its raw features have no spread to reference
+    # against (social_affiliation_activity_score in the INACTIVE phase, where the underlying
+    # *_together_fraction features are almost all zero). Skip those with a warning rather than
+    # dying on a bare KeyError, matching the warn-and-continue convention used for features that
+    # don't exist at a given resolution (compute_window_deltas, load_temporal_data, etc).
+    usable = [f for f in features if f'{f}__{a}' in piv.columns and f'{f}__{b}' in piv.columns]
+    skipped = [f for f in features if f not in usable]
+    if skipped:
+        print(f"[mouse_level_deltas] {skipped} have no usable values for both {a!r} and {b!r} "
+              f"in this subset - skipping (no '__{suffix}' column produced for them)")
+    need_cols = [f'{feat}__{a}' for feat in usable] + [f'{feat}__{b}' for feat in usable]
     piv = piv.dropna(subset=need_cols, how='any')
-    for feat in features:
+    for feat in usable:
         piv[f'{feat}__{suffix}'] = piv[f'{feat}__{b}'] - piv[f'{feat}__{a}']
     return piv.reset_index()

@@ -76,6 +76,7 @@ from statsmodels.stats.multitest import multipletests
 from aggregate import aggregate_to_mouse, box_paired_wide, mouse_level_deltas
 from domain_scores import compute_domain_scores
 from stats_utils import paired_effect_table, run_mixedlm, box_level_delta_table
+from temporal_dynamics import format_window_label
 
 # Palette conventions consistent with plot_effect_table.py / plot_domain_score_by_day.py
 # (dataviz skill diverging pair + the sex/background convention already used there).
@@ -1212,12 +1213,18 @@ def compute_window_deltas(df_fine, domain_defs, id_cols, phase='active',
 
 
 def _window_sort_key(w):
-    return int(w.split('-')[0])
+    # float(), not int() - sub-hour resolutions (15/30-min) have a fractional start hour
+    # ('12.0-12.5'), and int('12.0') raises ValueError.
+    return float(w.split('-')[0])
 
 
-def _window_label(w, active_start_hour=12):
-    lo, hi = (int(x) for x in w.split('-'))
-    return f'{lo - active_start_hour}-{hi - active_start_hour}h'
+def _window_label(w, active_start_hour=12, label_style='relative'):
+    """Thin wrapper around temporal_dynamics.format_window_label() so every call site in this
+    module can be re-rendered with label_style='zt' (raw ZT, for troubleshooting/cross-
+    referencing against the raw QC_table files) without recomputing any data - default
+    'relative' gives an audience-friendlier time-since-treatment label, auto-scaled to minutes
+    for sub-hour windows (e.g. '0-30min') or hours otherwise (e.g. '2-4h')."""
+    return format_window_label(w, style=label_style, active_start_hour=active_start_hour)
 
 
 def _ordered_combos(df, cols):
@@ -1245,13 +1252,13 @@ def _ordered_combos(df, cols):
     return sorted((tuple(r) for r in combos.itertuples(index=False)), key=key)
 
 
-def _combo_label(combo, cols, active_start_hour=12):
+def _combo_label(combo, cols, active_start_hour=12, label_style='relative'):
     parts = []
     for c, v in zip(cols, combo):
         if c == 'day':
             parts.append(f'Day {v}')
         elif c == 'time_window':
-            parts.append(_window_label(v, active_start_hour))
+            parts.append(_window_label(v, active_start_hour, label_style=label_style))
         else:
             parts.append(str(v))
     return '\n'.join(parts)
@@ -1274,7 +1281,7 @@ def _day_boundaries(combos, cols):
 
 
 def plot_delta_by_window(window_deltas, feature, sex, ax=None, window_col='time_window',
-                          full_session_deltas=None, active_start_hour=12):
+                          full_session_deltas=None, active_start_hour=12, label_style='relative'):
     """One domain's MDMA-vs-baseline delta across fine time windows (solid, mean+/-SEM, one
     line per background), with the same-window saline-box trajectory as a faint dotted
     reference (non-specific session-to-session drift), and - if `full_session_deltas` is given -
@@ -1287,6 +1294,11 @@ def plot_delta_by_window(window_deltas, feature, sex, ax=None, window_col='time_
     id_cols), or a list e.g. ['day', 'time_window'] to instead show each treatment day's
     within-session time-course separately (requires `window_deltas` built WITH 'day' in
     compute_window_deltas()'s id_cols) - light vertical rules mark day boundaries.
+
+    label_style: 'relative' (default) - time-since-`active_start_hour` x-tick labels, auto-scaled
+    to minutes for sub-hour windows or hours otherwise (see temporal_dynamics.format_window_label).
+    'zt' - raw ZT clock-time labels instead, for troubleshooting/cross-referencing against the
+    raw QC_table files - doesn't require recomputing window_deltas, just a different render.
 
     Returns: ax
     """
@@ -1333,16 +1345,19 @@ def plot_delta_by_window(window_deltas, feature, sex, ax=None, window_col='time_
 
     ax.axhline(0, color=COLOR_MUTED, lw=0.5, ls=':')
     ax.set_xticks(x)
-    ax.set_xticklabels([_combo_label(c, cols, active_start_hour) for c in combos], fontsize=7.5)
+    ax.set_xticklabels([_combo_label(c, cols, active_start_hour, label_style=label_style)
+                         for c in combos], fontsize=7.5)
     if 'day' not in cols:
-        ax.set_xlabel('Hours since active-phase start', fontsize=8.5)
+        ax.set_xlabel('Time since active-phase start' if label_style == 'relative'
+                       else 'ZT (h)', fontsize=8.5)
     ax.set_title(_domain_label(feature), fontsize=10.5)
     sns.despine(ax=ax)
     return ax
 
 
 def plot_delta_by_window_grid(window_deltas, features, sexes=('female', 'male'),
-                               window_col='time_window', full_session_deltas=None, title=None,
+                               window_col='time_window', full_session_deltas=None,
+                               label_style='relative', title=None,
                                save_path=None, show=True, dpi=150):
     """Reference grid: one row per sex, one column per feature, each panel via
     plot_delta_by_window(). Dotted lines = same-window saline-box reference; dashed horizontal
@@ -1350,6 +1365,9 @@ def plot_delta_by_window_grid(window_deltas, features, sexes=('female', 'male'),
     window comparison. Pass window_col=['day', 'time_window'] (with a 'day'-resolved
     `window_deltas`) to show each treatment day's time-course separately instead of pooling all
     post-treatment days into one representative within-session shape.
+
+    label_style: see plot_delta_by_window() - 'relative' (default, audience-friendly
+    time-since-treatment) or 'zt' (raw ZT clock time, for troubleshooting).
 
     Returns: (fig, axes)
     """
@@ -1363,7 +1381,7 @@ def plot_delta_by_window_grid(window_deltas, features, sexes=('female', 'male'),
         for col, feat in enumerate(features):
             ax = axes[row, col]
             plot_delta_by_window(window_deltas, feat, sex, ax=ax, window_col=window_col,
-                                  full_session_deltas=full_session_deltas)
+                                  full_session_deltas=full_session_deltas, label_style=label_style)
             ax.set_title(_domain_label(feat), fontsize=9) if row == 0 else ax.set_title('')
             if col == 0:
                 ax.set_ylabel(f'{sex}\nΔ z-score (post − baseline)', fontsize=9)
@@ -1493,6 +1511,116 @@ def compute_daygroup_mouse_sess(df, domain_defs, id_cols, phase='active',
     mouse_dg = compute_domain_scores(mouse_dg, domain_defs=domain_defs,
                                       reference_mask=baseline_mask, group_col='__zgrp')
     return mouse_dg
+
+
+# ============================================================================
+# 4.5 POST-TREATMENT WINDOWS (run_analysis.ipynb Part 6) - acute (first 2h post-treatment) /
+# short-term (first active phase post-treatment) / long-term (days 2-3) views, each compared to a
+# baseline reference that can be DAY-MISMATCHED from the post-treatment side (e.g. Day 1
+# post-treatment vs Days 2-3 baseline - excluding baseline Day 1's novelty/handling effects, same
+# rationale as mouse_baseline_day23 in run_analysis.ipynb section 4.3). This is what distinguishes
+# compute_posttx_window_mouse_sess() from compute_epoch_mouse_sess()/compute_daygroup_mouse_sess()
+# above, where every epoch's baseline reference is always drawn from THAT SAME epoch's own day(s).
+# ============================================================================
+def _select_posttx_rows(df_fine, phase, session_col, session_values, mdma_days, baseline_days,
+                         day_col):
+    """Rows for a post-treatment window comparison: the post-treatment session restricted to
+    `mdma_days` plus the baseline session restricted to `baseline_days` - a DIFFERENT day range
+    on each side. Shared by compute_posttx_window_mouse_sess() and compute_posttx_window_raw()
+    so the two are guaranteed to be looking at exactly the same animals and windows."""
+    sub = df_fine[df_fine['phase'] == phase].copy()
+    mdma_mask = (sub[session_col] == session_values[1]) & (sub[day_col].isin(list(mdma_days)))
+    base_mask = (sub[session_col] == session_values[0]) & (sub[day_col].isin(list(baseline_days)))
+    return sub[mdma_mask | base_mask]
+
+
+def compute_posttx_window_raw(df_fine, features, id_cols, phase='active',
+                               session_col='time_point', session_values=('baseline', 'MDMA'),
+                               window_col='time_window', mdma_days=(1,), baseline_days=(2, 3),
+                               day_col='day'):
+    """Mouse-level RAW-unit means per window - the same day selection as
+    compute_posttx_window_mouse_sess() below, but with NO z-scoring at all.
+
+    Feed the result to aggregate.mouse_level_deltas() to get a WITHIN-MOUSE PAIRED CHANGE in the
+    feature's own units (seconds / counts / distance): each mouse is compared to its own matched
+    clock window at baseline, so there is no population reference distribution and no scale
+    estimate - which is the point. The fine-resolution problems that break domain z-scores below
+    ~4h (a denominator collapsing toward zero, skew-driven flipping between the mean/SD and
+    median/MAD branches, one blown-up feature dragging a 10-feature composite) are all properties
+    of the standardisation step, and none of them apply here.
+
+    The trade-off is that raw units are not commensurable across features, so there is no
+    composite domain score - read one feature at a time.
+
+    Args:
+        features: RAW column names (e.g. 'outside_nest_duration', 'total_distance'), NOT domain
+            scores - domain scores only exist after z-scoring.
+
+    Returns: one row per mouse per time_point per window_col value, same shape as
+    compute_posttx_window_mouse_sess(), so the same downstream stack works unchanged -
+    mouse_level_deltas() for the paired delta, temporal_dynamics.plot_temporal_grid() for the
+    plots (pass ylabel to state the units).
+    """
+    sub = _select_posttx_rows(df_fine, phase, session_col, session_values,
+                               mdma_days, baseline_days, day_col)
+    missing = [f for f in features if f not in sub.columns]
+    if missing:
+        print(f"[compute_posttx_window_raw] {missing} not available at this resolution, skipping")
+    features = [f for f in features if f in sub.columns]
+    return aggregate_to_mouse(sub, id_cols + [session_col, window_col], features)
+
+
+def compute_posttx_window_mouse_sess(df_fine, domain_defs, id_cols, phase='active',
+                                      session_col='time_point', session_values=('baseline', 'MDMA'),
+                                      window_col='time_window', mdma_days=(1,), baseline_days=(2, 3),
+                                      match_baseline_window=False, day_col='day'):
+    """Mouse-level domain scores for a Part-6-style window comparison: MDMA-session rows
+    restricted to `mdma_days`, baseline-session rows restricted to `baseline_days` (default: MDMA
+    day 1 vs baseline days 2-3 - matches mouse_baseline_day23's day-1-excluded baseline). Pass
+    baseline_days=mdma_days for a day-matched baseline instead (e.g. the long-term Day 2 vs Day 3
+    variant, where both sides use the same days).
+
+    match_baseline_window: True z-scores within (sex, window_col) - a window is only compared to
+    the SAME window's baseline distribution, guarding against a circadian rise/fall across the
+    window range being mistaken for a treatment effect (same principle as compute_window_deltas()/
+    compute_epoch_mouse_sess() above). False (default) pools every window_col value present in the
+    baseline days into ONE flat per-sex reference instead - which is what any ABSOLUTE-value view
+    needs: under True, every window's baseline sits at ~0 by construction, so a
+    baseline-vs-post-treatment plot would show a meaningless flat baseline and a within-night
+    circadian shape would be silently z-scored away. Keep False for the plotted trajectories and
+    their deltas (so all windows share one scale); switch to True only for a per-window
+    hypothesis test where that within-window reference is the point.
+
+    Include 'condition' in `id_cols` (alongside 'background'/'treatment') to plot the 4-way
+    background x treatment split with temporal_dynamics.plot_temporal_grid(group='condition'), and
+    'day' to keep days as their own axis (giving that function's multi-day x-axis).
+
+    Returns: one row per mouse per time_point per window_col value - a drop-in for
+    temporal_dynamics.plot_temporal_grid(), for aggregate.mouse_level_deltas() (pass
+    id_cols=id_cols+[window_col]), and, after renaming window_col to 'epoch', for
+    compute_epoch_interaction()/compute_epoch_normalization() above.
+    """
+    sub = _select_posttx_rows(df_fine, phase, session_col, session_values,
+                               mdma_days, baseline_days, day_col)
+
+    raw_features = sorted({f for spec in domain_defs.values()
+                            for f in spec['features'] + spec.get('flip', [])})
+    missing = [f for f in raw_features if f not in sub.columns]
+    if missing:
+        print(f"[compute_posttx_window_mouse_sess] {missing} not available at this resolution, "
+              f"skipping those features (domains using them are scored on their remaining "
+              f"features only)")
+    raw_features = [f for f in raw_features if f in sub.columns]
+
+    mouse_win = aggregate_to_mouse(sub, id_cols + [session_col, window_col], raw_features)
+    if match_baseline_window:
+        mouse_win['__zgrp'] = mouse_win['sex'].astype(str) + '__' + mouse_win[window_col].astype(str)
+    else:
+        mouse_win['__zgrp'] = mouse_win['sex'].astype(str)
+    baseline_mask = mouse_win[session_col] == session_values[0]
+    mouse_win = compute_domain_scores(mouse_win, domain_defs=domain_defs,
+                                       reference_mask=baseline_mask, group_col='__zgrp')
+    return mouse_win
 
 
 def compute_epoch_interaction(mouse_sess_epoch, features, sexes=('female', 'male'),

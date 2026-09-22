@@ -103,6 +103,21 @@ TREATMENT_STYLE = {
     'MDMA': dict(marker='s', ls='-', alpha=0.95),
 }
 
+# Styling for a baseline session drawn as a REFERENCE UNDERLAY beneath the post-treatment lines
+# (plot_temporal(..., baseline_as_reference=True)) rather than as an equal-status second series.
+# Marker-less dotted, so it reads as "where this group started" without competing with the
+# post-treatment line's own marker/linestyle encoding (which is already carrying treatment when
+# group='condition') - same solid-is-tested / dotted-is-reference grammar as
+# treatment_interaction.plot_delta_by_window's saline reference line.
+BASELINE_REFERENCE_STYLE = dict(marker='', ls=':', alpha=0.8, lw=1.4)
+
+# Default per-BLOCK captions for plot_session_trajectory()'s two side-by-side session blocks.
+# The caller can override either one (session_labels=) to state what the block actually contains -
+# e.g. 'baseline (days 2-3 avg)' when the baseline side was averaged over days 2-3, which the
+# function cannot infer because that averaging happens upstream in
+# compute_posttx_window_mouse_sess() and leaves no day column behind.
+SESSION_BLOCK_LABELS = {'baseline': 'baseline', 'MDMA': 'after treatment'}
+
 GROUP_ORDERS = {
     'background': ['CTRL', 'ELA'],
     'condition': ['CTRL_saline', 'CTRL_MDMA', 'ELA_saline', 'ELA_MDMA'],
@@ -185,7 +200,7 @@ def _draw_shared_legend(fig, axes_flat, legend_loc, legend_y):
 def load_temporal_data(resolution, domain_defs=None, extra_features=None, id_cols=None,
                         phase='active', time_points=None, days=None, keep_day=False,
                         reference_time_point='baseline', data_path=None, female_path=None,
-                        male_path=None, verbose=True):
+                        male_path=None, normalize_by='out_of_nest', verbose=True):
     """Load one resolution's QC_table (1h/2h/3h/4h/6h/12h - same schema, pass just the number+h,
     e.g. '3h'), subset to `phase` (and optionally `time_points` - a single value or list), and
     return one row per mouse per time_window (x time_point, if more than one is loaded) with both
@@ -207,6 +222,11 @@ def load_temporal_data(resolution, domain_defs=None, extra_features=None, id_col
     to see an actual continuous multi-day trajectory (day-block-aware x-axis) rather than a
     single day(s)-collapsed shape.
 
+    normalize_by: passed straight to prep.load_data() - 'out_of_nest' (default, unchanged) or
+    'bin'. Exposed here so a fine-resolution call through this function gets the same denominator
+    treatment as one that calls load_data() directly, instead of silently keeping the unstable
+    out-of-nest denominator (see prep.renormalize_rates()).
+
     normDS/rank (used by social_hierarchy_score) don't exist below 12h resolution - dropped
     automatically, same as treatment_interaction.compute_window_deltas().
 
@@ -221,7 +241,8 @@ def load_temporal_data(resolution, domain_defs=None, extra_features=None, id_col
     female_path = female_path or os.path.join(data_path, f'female_{resolution}_filtered.csv')
     male_path = male_path or os.path.join(data_path, f'male_{resolution}_filtered.csv')
 
-    df = load_data(female_path=female_path, male_path=male_path, verbose=verbose)
+    df = load_data(female_path=female_path, male_path=male_path,
+                    normalize_by=normalize_by, verbose=verbose)
     sub = filter_data(df, phase=phase, days=days)
     if time_points is not None:
         time_points = [time_points] if isinstance(time_points, str) else list(time_points)
@@ -251,25 +272,76 @@ def load_temporal_data(resolution, domain_defs=None, extra_features=None, id_col
 
 
 def ordered_windows(data, window_col='time_window'):
-    """Sort time_window labels ('12-18','18-24',... or '0-3','3-6',...) by their numeric start
-    hour. Valid within a single phase (windows returned by load_temporal_data don't wrap
-    midnight within a phase - see prep.py)."""
-    return sorted(data[window_col].unique().tolist(), key=lambda w: int(w.split('-')[0]))
+    """Sort time_window labels ('12-18','18-24',... or '0-3','3-6',... or, at 15/30-min
+    resolution, '12.0-12.5','12.5-13.0',...) by their numeric start hour. Valid within a single
+    phase (windows returned by load_temporal_data don't wrap midnight within a phase - see
+    prep.py). float(), not int(), since sub-hour resolutions have a fractional start hour
+    ('12.0' etc.) - int('12.0') raises ValueError."""
+    return sorted(data[window_col].unique().tolist(), key=lambda w: float(w.split('-')[0]))
 
 
 def ordered_day_windows(data, day_col='day', window_col='time_window'):
     """Sort (day, time_window) combinations for a continuous multi-day x-axis: primarily by day,
     then by each window's numeric start hour within that day. Input: `data` with load_temporal_
-    data(..., keep_day=True)'s 'day' column present."""
+    data(..., keep_day=True)'s 'day' column present. float() - see ordered_windows()."""
     combos = data[[day_col, window_col]].drop_duplicates().itertuples(index=False, name=None)
-    return sorted(combos, key=lambda dw: (dw[0], int(dw[1].split('-')[0])))
+    return sorted(combos, key=lambda dw: (dw[0], float(dw[1].split('-')[0])))
+
+
+def format_window_label(w, style='relative', active_start_hour=12, unit=None):
+    """Format a time_window label ('12.0-12.5', '12-16', ...) for display.
+
+    style='zt' - the raw label unchanged, prefixed 'ZT' (e.g. 'ZT12.0-12.5') - for
+    troubleshooting/cross-referencing against the raw QC_table files.
+
+    style='relative' (default) - time since `active_start_hour` (treatment/lights-off),
+    auto-scaled to minutes when the window span is under 1h (e.g. '0-30min') or hours otherwise
+    (e.g. '2-4h') - more intuitive for a general audience than a ZT clock value. Pass
+    unit='min'/'h' to force one unit across a mixed-resolution grid instead of auto-scaling.
+    """
+    lo, hi = (float(x) for x in w.split('-'))
+    if style == 'zt':
+        return f'ZT{lo:g}-{hi:g}'
+    rel_lo, rel_hi = lo - active_start_hour, hi - active_start_hour
+    use_min = unit == 'min' or (unit is None and (hi - lo) < 1)
+    if use_min:
+        return f'{rel_lo * 60:g}-{rel_hi * 60:g}min'
+    return f'{rel_lo:g}-{rel_hi:g}h'
 
 
 def plot_temporal(data, feature, sex, ax, group='background', window_col='time_window',
-                   day_col='day', show_legend=True, sex_suffix=None):
+                   day_col='day', show_legend=True, sex_suffix=None, value_suffix='',
+                   show_baseline=True, baseline_as_reference=False, label_style=None,
+                   active_start_hour=12):
     """One feature's (or domain score's) time-course across time_window, for one sex, split by
     `group` - 'background' (CTRL vs ELA, 2 lines) or 'condition' (the 4 background x treatment
     groups, 4 lines).
+
+    value_suffix: appended to `feature` to build the column actually plotted, so a DELTA table
+    (aggregate.mouse_level_deltas() output, whose columns are '<feature>__delta') can be handed
+    to this same function with value_suffix='__delta' - panel titles still use the plain feature
+    name. Same convention as plot_by_box.plot_domains_by_box_grid(value_suffix=...). Delta tables
+    have no 'time_point' column; that's handled (a single unlabelled series is drawn).
+
+    show_baseline: False drops the 'baseline' session entirely, leaving only the post-treatment
+    lines - the same figure without the reference clutter, so a panel can be re-saved with or
+    without it by flipping one flag rather than re-filtering the table. Ignored when `data` has
+    no 'time_point' column (e.g. a delta table).
+
+    baseline_as_reference: when `data` holds both sessions, draw the 'baseline' time_point as a
+    marker-less dotted underlay (BASELINE_REFERENCE_STYLE) instead of as an equal-status second
+    series, and drop the '(MDMA)' qualifier from the post-treatment labels. Use this for the
+    "post-treatment value with baseline overlaid" view; leave False to give both sessions equal
+    weight (the fig7-style baseline-vs-MDMA overlay, group='background'). Has no effect when
+    show_baseline=False. For a version that puts the two sessions in SEPARATE side-by-side blocks
+    instead of overlaying them - easier to read when the overlay gets busy - see
+    plot_session_trajectory()/plot_session_trajectory_grid() below, which accept these same
+    window tables.
+
+    label_style: None (default) keeps the raw time_window labels ('12-16', '12.0-12.5'). Pass
+    'relative' for audience-friendly time-since-`active_start_hour` labels ('0-30min', '2-4h') or
+    'zt' for explicit 'ZT12-16' - see format_window_label(). 'relative' assumes the windows sit in
+    the phase starting at `active_start_hour`, so leave it None/'zt' for inactive-phase windows.
 
     sex_suffix: if given (e.g. 'male'), appended as a qualifier to sex-VARIANT group labels
     only (the 'ELA' side - see _is_sex_variant_group) - e.g. 'ELA' -> 'ELA (male)'. CTRL stays
@@ -297,11 +369,19 @@ def plot_temporal(data, feature, sex, ax, group='background', window_col='time_w
     """
     if group not in GROUP_ORDERS:
         raise ValueError(f"group must be one of {list(GROUP_ORDERS)}, got {group!r}")
+    col = f'{feature}{value_suffix}'
     sub_sex = data[data.sex == sex]
+    if not show_baseline and 'time_point' in sub_sex.columns:
+        sub_sex = sub_sex[sub_sex['time_point'] != 'baseline']
     order = [g for g in GROUP_ORDERS[group] if g in sub_sex[group].unique()]
     palette = GROUP_PALETTES[group](sex)
-    time_points = [t for t in TIME_POINT_STYLE if t in sub_sex['time_point'].unique()] + \
-        [t for t in sub_sex['time_point'].unique() if t not in TIME_POINT_STYLE]
+    # Delta tables (value_suffix='__delta') carry no session column - one unlabelled series.
+    has_time_point = 'time_point' in sub_sex.columns
+    if has_time_point:
+        time_points = [t for t in TIME_POINT_STYLE if t in sub_sex['time_point'].unique()] + \
+            [t for t in sub_sex['time_point'].unique() if t not in TIME_POINT_STYLE]
+    else:
+        time_points = [None]
 
     multi_day = day_col in sub_sex.columns and sub_sex[day_col].nunique() > 1
     if multi_day:
@@ -321,17 +401,31 @@ def plot_temporal(data, feature, sex, ax, group='background', window_col='time_w
         else:
             cond_style = None
         for tp in time_points:
-            d = sub_sex[(sub_sex[group] == grp) & (sub_sex['time_point'] == tp)]
+            d = sub_sex[sub_sex[group] == grp]
+            if has_time_point:
+                d = d[d['time_point'] == tp]
             if multi_day:
-                g = d.groupby([day_col, window_col])[feature].agg(['mean', 'sem']).reindex(day_windows)
+                g = d.groupby([day_col, window_col])[col].agg(['mean', 'sem']).reindex(day_windows)
             else:
-                g = d.groupby(window_col)[feature].agg(['mean', 'sem']).reindex(windows)
-            style = cond_style or TIME_POINT_STYLE.get(tp, dict(marker='o', ls='-', alpha=0.9))
-            qualifiers = ([tp] if len(time_points) > 1 else []) + \
-                ([sex_suffix] if sex_suffix and _is_sex_variant_group(grp) else [])
+                g = d.groupby(window_col)[col].agg(['mean', 'sem']).reindex(windows)
+
+            is_reference = baseline_as_reference and tp == 'baseline'
+            if is_reference:
+                style = BASELINE_REFERENCE_STYLE
+                qualifiers = ['baseline']
+            else:
+                style = cond_style or TIME_POINT_STYLE.get(tp, dict(marker='o', ls='-', alpha=0.9))
+                qualifiers = [tp] if (len(time_points) > 1 and not baseline_as_reference) else []
+            if sex_suffix and _is_sex_variant_group(grp):
+                qualifiers = qualifiers + [sex_suffix]
             label = f'{grp} ({", ".join(qualifiers)})' if qualifiers else grp
-            ax.errorbar(x, g['mean'], yerr=g['sem'], color=color, capsize=3, lw=2, markersize=5,
-                        label=label, **style)
+
+            kw = dict(capsize=3, lw=2, markersize=5)
+            kw.update(style)
+            # No error bars on a reference underlay - it would clutter the post-treatment series
+            # it sits behind, which keeps its own mean+/-SEM.
+            ax.errorbar(x, g['mean'], yerr=None if is_reference else g['sem'], color=color,
+                        label=label, zorder=1 if is_reference else 2, **kw)
 
     if multi_day:
         days_seen = sorted({d for d, _ in day_windows})
@@ -347,12 +441,21 @@ def plot_temporal(data, feature, sex, ax, group='background', window_col='time_w
             ax.text((lo + hi) / 2, 0.97, f'Day {d}', transform=ax.get_xaxis_transform(),
                     ha='center', va='top', fontsize=7, color=COLOR_MUTED)
 
+    if label_style:
+        xticklabels = [format_window_label(w, style=label_style,
+                                            active_start_hour=active_start_hour)
+                        for w in xticklabels]
+        xlabel = ('Time since active-phase start' if label_style == 'relative'
+                   else 'Zeitgeber time, ZT (h)')
+    else:
+        xlabel = 'Zeitgeber time, ZT (h)'
+
     ax.set_xticks(x)
     if multi_day:
         ax.set_xticklabels(xticklabels, fontsize=6.5, rotation=90)
     else:
         ax.set_xticklabels(xticklabels, fontsize=7.5, rotation=45, ha='right')
-    ax.set_xlabel('Zeitgeber time, ZT (h)' + (', by day' if multi_day else ''), fontsize=8.5)
+    ax.set_xlabel(xlabel + (', by day' if multi_day else ''), fontsize=8.5)
     ax.axhline(0, color=COLOR_MUTED, lw=0.5, ls=':', zorder=0)
     ax.set_title(_domain_label(feature), fontsize=10.5)
     if show_legend:
@@ -363,8 +466,9 @@ def plot_temporal(data, feature, sex, ax, group='background', window_col='time_w
 
 def plot_temporal_grid(data, features, sexes=('female', 'male'), group='background',
                         window_col='time_window', day_col='day', pair_sexes=False,
-                        max_cols=None, legend_loc='top', ylabel=None, title=None,
-                        save_path=None, show=True, dpi=150):
+                        max_cols=None, legend_loc='top', ylabel=None, value_suffix='',
+                        show_baseline=True, baseline_as_reference=False, label_style=None,
+                        active_start_hour=12, title=None, save_path=None, show=True, dpi=150):
     """Reference grid of plot_temporal() panels, one per feature x sex.
 
     Two layouts are available:
@@ -407,10 +511,13 @@ def plot_temporal_grid(data, features, sexes=('female', 'male'), group='backgrou
         for i, feat in enumerate(features):
             row, col_block = divmod(i, ncols_blocks)
             ax_left, ax_right = axes[row, col_block * 2], axes[row, col_block * 2 + 1]
-            plot_temporal(data, feat, sex_left, ax_left, group=group, window_col=window_col,
-                           day_col=day_col, show_legend=False, sex_suffix=sex_left)
-            plot_temporal(data, feat, sex_right, ax_right, group=group, window_col=window_col,
-                           day_col=day_col, show_legend=False, sex_suffix=sex_right)
+            panel_kw = dict(group=group, window_col=window_col, day_col=day_col,
+                             show_legend=False, value_suffix=value_suffix,
+                             show_baseline=show_baseline,
+                             baseline_as_reference=baseline_as_reference,
+                             label_style=label_style, active_start_hour=active_start_hour)
+            plot_temporal(data, feat, sex_left, ax_left, sex_suffix=sex_left, **panel_kw)
+            plot_temporal(data, feat, sex_right, ax_right, sex_suffix=sex_right, **panel_kw)
 
             ylo = min(ax_left.get_ylim()[0], ax_right.get_ylim()[0])
             yhi = max(ax_left.get_ylim()[1], ax_right.get_ylim()[1])
@@ -444,7 +551,10 @@ def plot_temporal_grid(data, features, sexes=('female', 'male'), group='backgrou
                     ax = axes[r, col]
                     plot_temporal(data, feat, sex, ax, group=group, window_col=window_col,
                                    day_col=day_col, show_legend=False,
-                                   sex_suffix=sex if len(sexes) > 1 else None)
+                                   sex_suffix=sex if len(sexes) > 1 else None,
+                                   value_suffix=value_suffix, show_baseline=show_baseline,
+                                   baseline_as_reference=baseline_as_reference,
+                                   label_style=label_style, active_start_hour=active_start_hour)
                     ax.set_title(_domain_label(feat) if row_offset == 0 else '', fontsize=9)
                     ax.set_ylabel(f'{sex}\n{ylabel}' if (col == 0 and ylabel) else
                                    (sex if col == 0 else ''), fontsize=9)
@@ -468,7 +578,8 @@ def plot_temporal_grid(data, features, sexes=('female', 'male'), group='backgrou
 def plot_session_trajectory(data, feature, sex, ax, group='condition', baseline_group=None,
                              session_order=('baseline', 'MDMA'), time_point_col='time_point',
                              day_col='day', window_col='time_window', gap=1.2, show_legend=True,
-                             sex_suffix=None):
+                             sex_suffix=None, value_suffix='', label_style=None,
+                             active_start_hour=12, session_labels=None, caption_loc='below'):
     """One feature's (or domain score's) FULL trajectory across BOTH sessions in a single panel:
     baseline days 1-3 on the left, a visual break at the treatment boundary, then post-injection
     (MDMA) days 1-3 on the right - same within-day (day, time_window) x-axis logic as
@@ -501,8 +612,31 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition', baseline_
     sex_suffix: see plot_temporal() - appended to sex-VARIANT group labels only ('ELA' side),
     for use from a grid sharing one legend across sexes (plot_session_trajectory_grid).
 
+    value_suffix / label_style / active_start_hour: as in plot_temporal().
+
+    session_labels: dict overriding the caption naming each session block (defaults to
+    SESSION_BLOCK_LABELS - 'baseline' and 'after treatment'). Pass e.g.
+    {'baseline': 'baseline (days 2-3 avg)'} to say what the baseline block actually averages,
+    which this function can't work out for itself. The x-axis label keeps only the window
+    description; which half is which is read off these captions instead.
+
+    caption_loc: 'below' (default) writes each caption under its own block. 'title' or 'none'
+    skip them here - 'title' is handled by plot_session_trajectory_grid(), which folds them into
+    the panel title instead ('Exploration (baseline | after treatment)') for a more compact
+    figure.
+
+    Also accepts the single-window-block tables built by
+    treatment_interaction.compute_posttx_window_mouse_sess() / compute_posttx_window_raw(), which
+    have no `day_col`: a constant day is assumed and the per-day shading/labels are suppressed.
+    That makes this the SEPARATE-PANELS alternative to plot_temporal(baseline_as_reference=True) -
+    same data, but baseline and post-treatment sit in two side-by-side blocks split by the
+    treatment break instead of being overlaid, which reads better when the overlay gets busy.
+
     Returns: ax
     """
+    if day_col not in data.columns:
+        data = data.assign(**{day_col: 1})
+    col = f'{feature}{value_suffix}'
     for g in (group, baseline_group):
         if g is not None and g not in GROUP_ORDERS:
             raise ValueError(f"group must be one of {list(GROUP_ORDERS)}, got {g!r}")
@@ -532,7 +666,7 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition', baseline_
                 style = dict(marker='o', ls='-', alpha=0.9)
             label = f'{grp} ({sex_suffix})' if sex_suffix and _is_sex_variant_group(grp) else grp
             d = sub_sex[(sub_sex[sess_group] == grp) & (sub_sex[time_point_col] == sess)]
-            g_stats = d.groupby([day_col, window_col])[feature].agg(['mean', 'sem']).reindex(dw)
+            g_stats = d.groupby([day_col, window_col])[col].agg(['mean', 'sem']).reindex(dw)
             ax.errorbar(xs, g_stats['mean'], yerr=g_stats['sem'], color=color, capsize=3, lw=2,
                         markersize=5, label=label, **style)
 
@@ -549,8 +683,9 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition', baseline_
                 ax.axvspan(lo, hi, color=COLOR_MUTED, alpha=0.06, zorder=0)
             if i > 0:
                 ax.axvline(lo, color=COLOR_MUTED, lw=0.5, alpha=0.3, zorder=0)
-            ax.text((lo + hi) / 2, 0.97, f'D{d}', transform=ax.get_xaxis_transform(),
-                    ha='center', va='top', fontsize=6, color=COLOR_MUTED)
+            if len(days_seen) > 1:
+                ax.text((lo + hi) / 2, 0.97, f'D{d}', transform=ax.get_xaxis_transform(),
+                        ha='center', va='top', fontsize=6, color=COLOR_MUTED)
 
     if len(blocks) == 2:
         break_x = (blocks[0][3][-1] + blocks[1][3][0]) / 2
@@ -559,9 +694,46 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition', baseline_
                 ha='center', va='center', fontsize=6.5, color=COLOR_INK, alpha=0.8,
                 bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.75))
 
+    if label_style:
+        all_labels = [format_window_label(w, style=label_style,
+                                           active_start_hour=active_start_hour)
+                       for w in all_labels]
+        axis_name = ('time since active phase start' if label_style == 'relative'
+                      else 'time_window (ZT, h)')
+    else:
+        axis_name = 'time_window (ZT, h)'
+    multi_day_axis = any(len({d for d, _ in dw}) > 1 for _, _, dw, _ in blocks)
+    tick_fontsize = 6
     ax.set_xticks(all_xs)
-    ax.set_xticklabels(all_labels, fontsize=6, rotation=90)
-    ax.set_xlabel(f'time_window (ZT, h), by day ({" | ".join(session_order)})', fontsize=7.5)
+    ax.set_xticklabels(all_labels, fontsize=tick_fontsize, rotation=90)
+
+    # The tick labels are rotated 90 degrees, so they eat a vertical strip below the axis whose
+    # height depends on the LONGEST label ('90-120min', '12.0-12.5', ...). The block captions have
+    # to clear that strip. Everything here is in POINTS, deliberately: a grid calls tight_layout()
+    # after these panels are built, which rescales the axes and so invalidates any offset
+    # expressed as an axes fraction - but font sizes, and therefore this strip, don't rescale.
+    try:
+        renderer = ax.figure.canvas.get_renderer()
+        strip_px = max(t.get_window_extent(renderer).height for t in ax.get_xticklabels())
+        tick_strip_pts = strip_px * 72.0 / ax.figure.dpi
+    except Exception:
+        tick_strip_pts = max((len(l) for l in all_labels), default=0) * tick_fontsize * 0.62
+
+    # labelpad is padding ON TOP OF matplotlib's automatic clearance of the tick labels, so it
+    # must NOT include tick_strip_pts again - it only has to clear the caption row (8pt text hung
+    # 6pt below the strip), otherwise the axis label drifts far below the plot.
+    ax.set_xlabel(axis_name + (', by day' if multi_day_axis else ''), fontsize=7.5,
+                  labelpad=17 if caption_loc == 'below' else 4)
+
+    if caption_loc == 'below':
+        block_captions = {**SESSION_BLOCK_LABELS, **(session_labels or {})}
+        for sess, _, _, xs in blocks:
+            if not xs:
+                continue
+            ax.annotate(block_captions.get(sess, sess),
+                        xy=((xs[0] + xs[-1]) / 2, 0), xycoords=('data', 'axes fraction'),
+                        xytext=(0, -(tick_strip_pts + 6)), textcoords='offset points',
+                        ha='center', va='top', fontsize=8, color=COLOR_INK, fontweight='bold')
     ax.axhline(0, color=COLOR_MUTED, lw=0.5, ls=':', zorder=0)
     ax.set_title(_domain_label(feature), fontsize=10.5)
     if show_legend:
@@ -576,8 +748,10 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition', baseline_
 
 def plot_session_trajectory_grid(data, features, sexes, group='condition', baseline_group=None,
                                   session_order=('baseline', 'MDMA'), pair_sexes=False,
-                                  max_cols=None, legend_loc='top', title=None, save_path=None,
-                                  show=True, dpi=150):
+                                  max_cols=None, legend_loc='top', value_suffix='',
+                                  label_style=None, active_start_hour=12, ylabel=None,
+                                  session_labels=None, caption_loc='below', title=None,
+                                  save_path=None, show=True, dpi=150):
     """Grid of plot_session_trajectory() panels - the full baseline -> post-injection
     trajectory for each feature/domain in `features` - meant for CORE_DOMAIN_FEATURES-sized
     lists (12 domains) where one row would be unreadably wide.
@@ -609,6 +783,13 @@ def plot_session_trajectory_grid(data, features, sexes, group='condition', basel
 
     Returns: (fig, axes)
     """
+    # caption_loc='title' folds the session names into each panel title
+    # ('Exploration (baseline | after treatment)') instead of writing them under the blocks -
+    # more compact, and keeps the x-axis label tight against the ticks.
+    _caps = {**SESSION_BLOCK_LABELS, **(session_labels or {})}
+    title_suffix = (' (' + ' | '.join(_caps.get(s_, s_) for s_ in session_order) + ')'
+                     if caption_loc == 'title' else '')
+
     sexes = [sexes] if isinstance(sexes, str) else list(sexes)
     n_feat = len(features)
     panel_w = 4.4
@@ -627,12 +808,13 @@ def plot_session_trajectory_grid(data, features, sexes, group='condition', basel
         for i, feat in enumerate(features):
             row, col_block = divmod(i, ncols_blocks)
             ax_left, ax_right = axes[row, col_block * 2], axes[row, col_block * 2 + 1]
-            plot_session_trajectory(data, feat, sex_left, ax_left, group=group,
-                                     baseline_group=baseline_group, session_order=session_order,
-                                     show_legend=False, sex_suffix=sex_left)
-            plot_session_trajectory(data, feat, sex_right, ax_right, group=group,
-                                     baseline_group=baseline_group, session_order=session_order,
-                                     show_legend=False, sex_suffix=sex_right)
+            traj_kw = dict(group=group, baseline_group=baseline_group,
+                            session_order=session_order, show_legend=False,
+                            value_suffix=value_suffix, label_style=label_style,
+                            active_start_hour=active_start_hour, session_labels=session_labels,
+                            caption_loc=caption_loc)
+            plot_session_trajectory(data, feat, sex_left, ax_left, sex_suffix=sex_left, **traj_kw)
+            plot_session_trajectory(data, feat, sex_right, ax_right, sex_suffix=sex_right, **traj_kw)
 
             ylo = min(ax_left.get_ylim()[0], ax_right.get_ylim()[0])
             yhi = max(ax_left.get_ylim()[1], ax_right.get_ylim()[1])
@@ -641,8 +823,8 @@ def plot_session_trajectory_grid(data, features, sexes, group='condition', basel
             ax_right.tick_params(labelleft=False)
 
             domain_label = _domain_label(feat)
-            ax_left.set_title(f'{domain_label} ({sex_left})', fontsize=8.5)
-            ax_right.set_title(f'{domain_label} ({sex_right})', fontsize=8.5)
+            ax_left.set_title(f'{domain_label} ({sex_left}){title_suffix}', fontsize=8.5)
+            ax_right.set_title(f'{domain_label} ({sex_right}){title_suffix}', fontsize=8.5)
 
         for i in range(n_feat, nrows_blocks * ncols_blocks):
             row, col_block = divmod(i, ncols_blocks)
@@ -665,10 +847,16 @@ def plot_session_trajectory_grid(data, features, sexes, group='condition', basel
                     plot_session_trajectory(data, feat, sex, ax, group=group,
                                              baseline_group=baseline_group,
                                              session_order=session_order, show_legend=False,
-                                             sex_suffix=sex if len(sexes) > 1 else None)
-                    ax.set_title(_domain_label(feat) if row_offset == 0 else '', fontsize=9)
-                    if col == 0 and len(sexes) > 1:
-                        ax.set_ylabel(sex, fontsize=9)
+                                             sex_suffix=sex if len(sexes) > 1 else None,
+                                             value_suffix=value_suffix, label_style=label_style,
+                                             active_start_hour=active_start_hour,
+                                             session_labels=session_labels,
+                                             caption_loc=caption_loc)
+                    ax.set_title(f'{_domain_label(feat)}{title_suffix}' if row_offset == 0
+                                  else '', fontsize=9)
+                    if col == 0:
+                        ax.set_ylabel(f'{sex}\n{ylabel}' if ylabel else
+                                       (sex if len(sexes) > 1 else ''), fontsize=9)
                 for col in range(len(feats_in_group), ncols):
                     axes[r, col].axis('off')
 

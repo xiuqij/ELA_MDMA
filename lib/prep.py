@@ -97,6 +97,59 @@ def clean_infinite(df):
     return df
 
 
+def bin_seconds(df):
+    """Bin length in seconds, derived per row as nest_duration + outside_nest_duration. That sum
+    is exactly the bin length at every resolution and in both phases (12h/6h/4h/3h/2h/1h/30min/
+    15min all verified), so no resolution argument is needed - the table describes its own bin
+    width."""
+    return df['nest_duration'] + df['outside_nest_duration']
+
+
+def renormalize_rates(df, normalize_by='out_of_nest'):
+    """Choose the denominator for the *_duration_fraction / *_event_rate features (27 columns).
+
+    'out_of_nest' (default) is a NO-OP: the published columns already are
+    x / outside_nest_duration, verified exact against their own numerators at all 8 resolutions
+    (0 of 27 columns mismatch), so nothing is recomputed and the loaded table is bit-identical to
+    what it was before this function existed.
+
+    'bin' rebuilds them against the BIN LENGTH instead (<f>_duration / bin_seconds,
+    <f>_count / bin_seconds). Two reasons this matters at fine resolution:
+
+      - Stability. outside_nest_duration is bin_length - nest_duration, so it collapses toward
+        zero as bins shrink (1st percentile: 5896s at 12h, 76s at 2h, 0s at 30min) and the ratio
+        explodes - exploration_score's max |z| reaches 861 at 2h and 1103 at 30min. Dividing by a
+        constant removes that failure mode outright, with no rows dropped (max |z| -> 4.8 and 5.4).
+      - Interpretation. outside_nest_duration is ITSELF a significant ELA-vs-CTRL difference (ELA
+        nests ~1700s more per 12h, dz=-0.615, p=0.0015), so the default denominator divides by an
+        outcome that differs between the groups being compared, partially cancelling the effect
+        being measured. The two conventions answer different questions: 'out_of_nest' = "when
+        active, how is time allocated?", 'bin' = "over the whole window, how much happens?".
+
+    Affects exactly 4 of the 12 core domains - exploration_score, feeding_drinking_amount_score,
+    inactivity_score and speeding_score, the four built entirely from these features. The other 8
+    are bit-identical either way. Knock-on effects in add_derived_features() below:
+    feeder_prox_pref / water_prox_pref are ratios of two SAME-denominator fractions so it cancels
+    and they are unaffected; total_chase_exposure is a sum of two fractions and IS rescaled.
+    """
+    if normalize_by == 'out_of_nest':
+        return df
+    if normalize_by != 'bin':
+        raise ValueError(f"normalize_by must be 'out_of_nest' or 'bin', got {normalize_by!r}")
+
+    df = df.copy()
+    denom = bin_seconds(df)
+    for col in [c for c in df.columns if c.endswith('_duration_fraction')]:
+        numerator = col[:-len('_duration_fraction')] + '_duration'
+        if numerator in df.columns:
+            df[col] = df[numerator] / denom
+    for col in [c for c in df.columns if c.endswith('_event_rate')]:
+        numerator = col[:-len('_event_rate')] + '_count'
+        if numerator in df.columns:
+            df[col] = df[numerator] / denom
+    return df
+
+
 def add_derived_features(df):
     """Raw-feature-level derived columns used by multiple domain scores. Computed here (once,
     at load time) rather than inside domain_scores.py so they're available to any downstream
@@ -120,10 +173,17 @@ def add_derived_features(df):
     return df
 
 
-def load_data(female_path, male_path, drop_bad_blocks=True, fill_nans=True, verbose=True):
+def load_data(female_path, male_path, drop_bad_blocks=True, fill_nans=True,
+               normalize_by='out_of_nest', verbose=True):
     """Load + clean one resolution's worth of data (female + male files concatenated).
-    Works for any resolution file (1h/2h/3h/4h/6h/12h) with the same column schema, EXCEPT
-    normDS/rank which only exist at 12h/session resolution."""
+    Works for any resolution file (15min/30min/1h/2h/3h/4h/6h/12h) with the same column schema,
+    EXCEPT normDS/rank which only exist at 12h/session resolution.
+
+    normalize_by: denominator for the *_duration_fraction / *_event_rate features - see
+    renormalize_rates(). 'out_of_nest' (default) leaves them exactly as published, so every
+    existing caller is unaffected. Pass 'bin' at fine resolution (2h and below), where the
+    out-of-nest denominator becomes unstable.
+    """
     f = pd.read_csv(female_path)
     m = pd.read_csv(male_path)
     df = pd.concat([f, m], ignore_index=True)
@@ -133,6 +193,9 @@ def load_data(female_path, male_path, drop_bad_blocks=True, fill_nans=True, verb
     if fill_nans:
         df = fill_no_event_nans(df)
     df = clean_infinite(df)
+    # Before add_derived_features, so the derived columns are built from whichever
+    # normalization the caller asked for rather than a mix of the two.
+    df = renormalize_rates(df, normalize_by=normalize_by)
     df = add_derived_features(df)
     return df
 
