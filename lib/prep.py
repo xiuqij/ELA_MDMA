@@ -49,7 +49,9 @@ KNOWN_BAD_BLOCKS = [
 NA_TO_ZERO_SUFFIXES = ('_count', '_duration', '_duration_fraction', '_event_rate',
                         '_frames', '_together_fraction', '_alone_fraction', '_fraction',
                         '_sum', '_co_occupancy')
-NA_KEEP_PATTERNS = ('mean_duration', 'ratio', 'normDS', 'rank')
+# '_ratio' (not bare 'ratio'): 'duration' itself contains 'ratio', so the bare pattern silently
+# excluded every *_duration / *_duration_fraction column from the zero-fill above.
+NA_KEEP_PATTERNS = ('mean_duration', '_ratio', 'normDS', 'rank')
 
 
 def drop_known_bad_blocks(df, verbose=True):
