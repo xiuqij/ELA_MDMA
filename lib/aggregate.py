@@ -84,8 +84,11 @@ def mouse_level_deltas(df, features, id_cols, session_col='time_point',
     if skipped:
         print(f"[mouse_level_deltas] {skipped} have no usable values for both {a!r} and {b!r} "
               f"in this subset - skipping (no '__{suffix}' column produced for them)")
-    need_cols = [f'{feat}__{a}' for feat in usable] + [f'{feat}__{b}' for feat in usable]
-    piv = piv.dropna(subset=need_cols, how='any')
+    # Drop a row only when a whole SESSION is missing. A single undefined feature (e.g. a domain
+    # whose robust z is NaN for one sex because its reference MAD is 0) just leaves that one delta
+    # NaN - dropping on any NaN would discard the mouse for every other feature as well.
+    piv = piv.dropna(subset=[f'{feat}__{a}' for feat in usable], how='all')
+    piv = piv.dropna(subset=[f'{feat}__{b}' for feat in usable], how='all')
     for feat in usable:
         piv[f'{feat}__{suffix}'] = piv[f'{feat}__{b}'] - piv[f'{feat}__{a}']
     return piv.reset_index()
