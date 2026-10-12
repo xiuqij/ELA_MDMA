@@ -31,6 +31,7 @@ SKEW_THRESHOLD = 1.0
 
 # ============================================================================
 # CORE domains - curated, 12 domains in 6 categories (Nest,Motion,Exploration,Foraging,Social affiliation,Social hierarchy)
+# - see DOMAIN_CATEGORIES below
 # ============================================================================
 CORE_DOMAINS = {
     'nest_occupancy_score': {
@@ -238,6 +239,40 @@ ALL_DOMAINS = {**CORE_DOMAINS, **SUPPLEMENTARY_DOMAINS}
 CORE_DOMAIN_FEATURES = list(CORE_DOMAINS.keys())
 SUPPLEMENTARY_DOMAIN_FEATURES = list(SUPPLEMENTARY_DOMAINS.keys())
 ALL_DOMAIN_FEATURES = list(ALL_DOMAINS.keys())
+
+# ============================================================================
+# POST-TREATMENT WINDOW domains (run_analysis step 6). CORE with social_hierarchy_score swapped
+# for the two chasing-role scores: normDS only exists at 12h/session resolution, so within a
+# sub-session window the hierarchy domain reduces to chasing_duration_ratio alone - the chasing /
+# being-chased rates are the directly measured behaviors, and stay separate (opposite-signed, see
+# the module docstring).
+# ============================================================================
+POSTTX_DOMAINS = {k: v for k, v in CORE_DOMAINS.items() if k != 'social_hierarchy_score'}
+POSTTX_DOMAINS.update({k: SUPPLEMENTARY_DOMAINS[k]
+                       for k in ('chasing_activity_score', 'being_chased_score')})
+POSTTX_DOMAIN_FEATURES = list(POSTTX_DOMAINS.keys())
+
+# Category membership, in display order - used to lay out plot grids so that the domains of one
+# category sit together (see temporal_dynamics.plot_temporal_grid(layout=...)).
+DOMAIN_CATEGORIES = {
+    'Nest': ['nest_occupancy_score', 'nest_fragmentation_score'],
+    'Motion': ['locomotion_score', 'movement_complexity_score', 'inactivity_score',
+               'speeding_score'],
+    'Exploration': ['exploration_score'],
+    'Foraging': ['feeding_drinking_amount_score', 'resource_proximity_preference_score'],
+    'Social affiliation': ['social_affiliation_nest_score', 'social_affiliation_activity_score'],
+    'Social hierarchy': ['social_hierarchy_score'],
+    'Chasing': ['chasing_activity_score', 'being_chased_score'],
+}
+
+
+def category_layout(rows, categories=None):
+    """Grid layout from category names: `rows` is a list of rows, each a list of category names
+    to place side by side, e.g. [['Nest', 'Exploration', 'Foraging'], ['Motion']]. Returns the
+    list-of-{category: [domains]} structure that plot_temporal_grid()/plot_session_trajectory_grid()
+    take as `layout`."""
+    categories = categories or DOMAIN_CATEGORIES
+    return [{c: categories[c] for c in row} for row in rows]
 
 
 def robust_or_standard_z(x, ref_x):
