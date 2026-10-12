@@ -82,6 +82,16 @@ COLOR_CTRL = '#898781'
 COLOR_MUTED = '#898781'
 COLOR_INK = '#0b0b0b'
 SEX_ELA_COLORS = {'female': '#e34948', 'male': '#2a78d6'}
+# Line colour per sex x background - the one place to change the palette. CTRL: greys tinted
+# toward each sex's ELA hue, so CTRL still reads as the control but the sexes stay distinguishable.
+SEX_BACKGROUND_COLORS = {
+    'female': {'CTRL': '#a8878b', 'ELA': SEX_ELA_COLORS['female']},
+    'male': {'CTRL': '#7f93ad', 'ELA': SEX_ELA_COLORS['male']},
+}
+
+
+def background_color(sex, background):
+    return SEX_BACKGROUND_COLORS.get(sex, SEX_BACKGROUND_COLORS['female'])[background]
 
 # Styling for overlaying multiple time_points (sessions) in one panel (reproduces
 # fig7_temporal_day1.py's baseline=dashed/square vs MDMA=solid/circle convention). Only used
@@ -125,13 +135,12 @@ GROUP_ORDERS = {
 
 
 def _background_palette(sex):
-    return {'CTRL': COLOR_CTRL, 'ELA': SEX_ELA_COLORS.get(sex, '#e34948')}
+    return {bg: background_color(sex, bg) for bg in ('CTRL', 'ELA')}
 
 
 def _condition_palette(sex):
-    ela = SEX_ELA_COLORS.get(sex, '#e34948')
-    return {'CTRL_saline': COLOR_CTRL, 'CTRL_MDMA': COLOR_CTRL,
-            'ELA_saline': ela, 'ELA_MDMA': ela}
+    return {f'{bg}_{tx}': background_color(sex, bg) for bg in ('CTRL', 'ELA')
+            for tx in ('saline', 'MDMA')}
 
 
 GROUP_PALETTES = {'background': _background_palette, 'condition': _condition_palette}
@@ -142,13 +151,13 @@ def _domain_label(feature):
 
 
 def _is_sex_variant_group(grp):
-    """True if `grp`'s color depends on sex - the 'ELA' side of GROUP_PALETTES (background=
-    'ELA', condition='ELA_saline'/'ELA_MDMA'), which is colored via SEX_ELA_COLORS; the 'CTRL'
-    side is COLOR_CTRL regardless of sex. Used to decide which legend entries need a sex
-    suffix when a grid's shared legend (_shared_legend_handles) mixes both sexes - without it,
-    two differently-colored lines both labeled plain 'ELA' collide on that label and the dedup
-    silently drops one sex's handle (see plot_temporal_grid/plot_session_trajectory_grid)."""
-    return grp.split('_', 1)[0] == 'ELA'
+    """True if `grp`'s colour depends on sex (its background has different colours for the two
+    sexes in SEX_BACKGROUND_COLORS). Used to decide which legend entries need a sex suffix when a
+    grid's shared legend (_shared_legend_handles) mixes both sexes - without it, two
+    differently-coloured lines with the same label collide and the dedup silently drops one
+    sex's handle (see plot_temporal_grid/plot_session_trajectory_grid)."""
+    bg = grp.split('_', 1)[0]
+    return len({colors[bg] for colors in SEX_BACKGROUND_COLORS.values()}) > 1
 
 
 def _auto_max_cols(n_items, small_threshold, min_cols):
@@ -195,6 +204,70 @@ def _draw_shared_legend(fig, axes_flat, legend_loc, legend_y):
     if handles:
         fig.legend(handles, labels, loc='center', bbox_to_anchor=(0.5, legend_y),
                    ncol=min(len(handles), 4), frameon=False, fontsize=8.5)
+
+
+COLOR_CATEGORY_BG = '#f4f3ef'   # faint tint behind each category block
+
+
+def _category_figure(layout, features, sexes, panel_w, panel_h):
+    """Figure for a category-grouped grid: each row of `layout` is a {category: [features]} dict
+    whose categories sit side by side, each in its own tinted block with the category name as a
+    header, so a category is never split across rows. Features not in `features` are dropped
+    (e.g. a domain that is undefined in the inactive phase), as are categories left empty.
+    Every panel has the same width - a row narrower than the widest one gets blank space on the
+    right. Within a block there is one panel row per sex.
+
+    Uses constrained layout (nested subfigures don't work with tight_layout), so callers finish
+    with _finish_category_figure() instead of _legend_layout()/tight_layout().
+
+    Returns (fig, cells): cells is a list of (ax, feature, sex, first_in_row, first_sex_row).
+    """
+    rows = []
+    for row in layout:
+        blocks = [(cat, [f for f in feats if f in features]) for cat, feats in row.items()]
+        blocks = [(cat, feats) for cat, feats in blocks if feats]
+        if blocks:
+            rows.append(blocks)
+    ncols = max(sum(len(feats) for _, feats in blocks) for blocks in rows)
+
+    fig = plt.figure(figsize=(panel_w * ncols, (panel_h * len(sexes) + 0.35) * len(rows)),
+                     layout='constrained')
+    row_figs = fig.subfigures(len(rows), 1, squeeze=False)[:, 0]
+    cells = []
+    for row_fig, blocks in zip(row_figs, rows):
+        widths = [len(feats) for _, feats in blocks]
+        spare = ncols - sum(widths)
+        block_figs = row_fig.subfigures(1, len(blocks) + (1 if spare else 0), squeeze=False,
+                                        width_ratios=widths + ([spare] if spare else []),
+                                        wspace=0.02)[0]
+        for b_i, ((cat, feats), block_fig) in enumerate(zip(blocks, block_figs)):
+            block_fig.set_facecolor(COLOR_CATEGORY_BG)
+            block_fig.suptitle(cat, fontsize=10.5, fontweight='bold', color=COLOR_INK)
+            axs = block_fig.subplots(len(sexes), len(feats), squeeze=False)
+            for s_i, sex in enumerate(sexes):
+                for c_i, feat in enumerate(feats):
+                    axs[s_i, c_i].set_facecolor('white')
+                    cells.append((axs[s_i, c_i], feat, sex, b_i == 0 and c_i == 0, s_i == 0))
+    return fig, cells
+
+
+def _finish_category_figure(fig, axes_flat, legend_loc, title, footnote=None):
+    """Suptitle + shared legend for a _category_figure() grid. Any truthy legend_loc puts the
+    legend BELOW the grid: constrained layout's 'outside upper' legend collides with suptitle."""
+    if title:
+        fig.suptitle(title, color=COLOR_INK, fontsize=12, fontweight='bold')
+    if legend_loc:
+        handles, labels = _shared_legend_handles(axes_flat)
+        if handles:
+            # footnote as the legend title, so the two stack instead of overlapping
+            leg = fig.legend(handles, labels, loc='outside lower center',
+                             ncol=min(len(handles), 4), frameon=False, fontsize=8.5,
+                             title=footnote, title_fontsize=8.5)
+            if footnote:
+                leg.get_title().set_color(COLOR_MUTED)
+            return
+    if footnote:
+        fig.supxlabel(footnote, fontsize=8.5, color=COLOR_MUTED)
 
 
 def load_temporal_data(resolution, domain_defs=None, extra_features=None, id_cols=None,
@@ -309,10 +382,64 @@ def format_window_label(w, style='relative', active_start_hour=12, unit=None):
     return f'{rel_lo:g}-{rel_hi:g}h'
 
 
+def p_stars(p):
+    """'***' / '**' / '*' for p < 0.001 / 0.01 / 0.05, '' otherwise (NaN included)."""
+    if p is None or not np.isfinite(p):
+        return ''
+    return '***' if p < 0.001 else '**' if p < 0.01 else '*' if p < 0.05 else ''
+
+
+BIN_STAR_ROWS = {'CTRL': 0.90, 'ELA': 0.83}   # axes-fraction heights of the two star rows
+
+
+def _annotate_bin_stars(ax, bin_sig, feature, sex, x_keys, multi_day, window_col, day_col,
+                        xs=None):
+    """Stars above each bin whose test in `bin_sig` reaches p < 0.05 (see plot_temporal(bin_sig=)).
+    The y-axis is extended so the data stay below the star rows (and the 'Day N' labels)."""
+    lo, hi = ax.get_ylim()
+    ax.set_ylim(lo, lo + (hi - lo) / 0.78)
+    sig = bin_sig[(bin_sig['sex'] == sex) & (bin_sig['domain'] == feature)]
+    if multi_day and day_col in sig.columns:
+        keys = [(int(d), w) for d, w in x_keys]
+        key = lambda r: (int(r[day_col]), r[window_col])
+    else:
+        keys = [k[1] if isinstance(k, tuple) else k for k in x_keys]
+        key = lambda r: r[window_col]
+    pos = dict(zip(keys, xs if xs is not None else range(len(keys))))
+    colors = {bg: background_color(sex, bg) for bg in ('CTRL', 'ELA')}
+    for _, r in sig.iterrows():
+        stars, i = p_stars(r['p']), pos.get(key(r))
+        if stars and i is not None:
+            ax.text(i, BIN_STAR_ROWS[r['background']], stars, transform=ax.get_xaxis_transform(),
+                    ha='center', va='center', fontsize=9, fontweight='bold',
+                    color=colors[r['background']])
+
+
+def _window_sig_line(window_sig, feature, sex, p_col='p_fdr'):
+    """'window: CTRL ** · ELA n.s.' for a panel title, from a whole-window test table."""
+    sub = window_sig[(window_sig['sex'] == sex) & (window_sig['domain'] == feature)]
+    parts = []
+    for bg in ('CTRL', 'ELA'):
+        r = sub[sub['background'] == bg]
+        if len(r):
+            parts.append(f"{bg} {p_stars(r[p_col].iloc[0]) or 'n.s.'}")
+    return 'window: ' + ' · '.join(parts) if parts else ''
+
+
+def _mark_if_empty(ax, values):
+    """Say so in the panel when a score has no values at all here, rather than leaving a blank
+    axes that reads like a plotting error - e.g. a robust-z domain whose baseline reference has
+    MAD = 0 (most mice show zero events in the window), which compute_domain_scores() leaves NaN."""
+    if values is None or not np.isfinite(values.astype(float)).any():
+        ax.text(0.5, 0.5, 'score undefined here\n(no spread in the baseline reference)',
+                transform=ax.transAxes, ha='center', va='center', fontsize=8, color=COLOR_MUTED)
+        ax.set_yticks([])
+
+
 def plot_temporal(data, feature, sex, ax, group='background', window_col='time_window',
                    day_col='day', show_legend=True, sex_suffix=None, value_suffix='',
                    show_baseline=True, baseline_as_reference=False, label_style=None,
-                   active_start_hour=12):
+                   active_start_hour=12, bin_sig=None):
     """One feature's (or domain score's) time-course across time_window, for one sex, split by
     `group` - 'background' (CTRL vs ELA, 2 lines) or 'condition' (the 4 background x treatment
     groups, 4 lines).
@@ -363,6 +490,11 @@ def plot_temporal(data, feature, sex, ax, group='background', window_col='time_w
     sequence spanning all loaded days - light alternating shading + a 'Day N' label mark each
     day's block - so the actual trajectory across days is visible, not just a single collapsed
     within-day shape. Otherwise the x-axis is just time_window (the original single-cycle view).
+
+    bin_sig: optional per-bin test table (treatment_interaction.compute_posttx_mouse_stats(...,
+    bin_cols=[...]) - columns sex, background, domain, p, time_window [, day]). Stars for p < 0.05
+    are drawn above each bin, one row per background (grey = CTRL, sex colour = ELA); the y-axis
+    gets headroom for them.
 
     Input: `data` - output of load_temporal_data().
     Returns: ax
@@ -457,6 +589,10 @@ def plot_temporal(data, feature, sex, ax, group='background', window_col='time_w
         ax.set_xticklabels(xticklabels, fontsize=7.5, rotation=45, ha='right')
     ax.set_xlabel(xlabel + (', by day' if multi_day else ''), fontsize=8.5)
     ax.axhline(0, color=COLOR_MUTED, lw=0.5, ls=':', zorder=0)
+    _mark_if_empty(ax, sub_sex[col] if col in sub_sex.columns else None)
+    if bin_sig is not None:
+        _annotate_bin_stars(ax, bin_sig, feature, sex, day_windows if multi_day else windows,
+                            multi_day, window_col, day_col)
     ax.set_title(_domain_label(feature), fontsize=10.5)
     if show_legend:
         ax.legend(fontsize=7, loc='best')
@@ -468,10 +604,21 @@ def plot_temporal_grid(data, features, sexes=('female', 'male'), group='backgrou
                         window_col='time_window', day_col='day', pair_sexes=False,
                         max_cols=None, legend_loc='top', ylabel=None, value_suffix='',
                         show_baseline=True, baseline_as_reference=False, label_style=None,
-                        active_start_hour=12, title=None, save_path=None, show=True, dpi=150):
+                        active_start_hour=12, title=None, save_path=None, show=True, dpi=150,
+                        layout=None, bin_sig=None, window_sig=None, footnote=None):
     """Reference grid of plot_temporal() panels, one per feature x sex.
 
-    Two layouts are available:
+    bin_sig / window_sig / footnote (layout mode only): significance annotation for a DELTA
+    grid - bin_sig puts per-bin stars above the bins (see plot_temporal), window_sig adds a
+    'window: CTRL ** · ELA n.s.' line under each panel title (from its p_fdr column), and
+    footnote is printed under the figure to say what the marks mean.
+
+    layout: optional category grouping - a list of rows, each a {category: [features]} dict
+    (build one with domain_scores.category_layout()). Each category becomes a labelled block and
+    is never split across rows; only features also listed in `features` are drawn. Overrides
+    max_cols/pair_sexes. None (default) keeps the plain wrapped layouts below.
+
+    Otherwise two layouts are available:
 
     - pair_sexes=False (default): one row per sex, one column per feature (as before).
       When `features` is long, the columns wrap into additional row-groups (stacked
@@ -496,6 +643,31 @@ def plot_temporal_grid(data, features, sexes=('female', 'male'), group='backgrou
     multi_day = day_col in data.columns and data[day_col].nunique() > 1
     panel_w = 4.2 if multi_day else 2.8
     n_feat = len(features)
+
+    if layout is not None:
+        fig, cells = _category_figure(layout, features, sexes, panel_w, 3.9)
+        for ax, feat, sex, first_in_row, first_sex_row in cells:
+            plot_temporal(data, feat, sex, ax, group=group, window_col=window_col,
+                           day_col=day_col, show_legend=False,
+                           sex_suffix=sex if len(sexes) > 1 else None,
+                           value_suffix=value_suffix, show_baseline=show_baseline,
+                           baseline_as_reference=baseline_as_reference,
+                           label_style=label_style, active_start_hour=active_start_hour,
+                           bin_sig=bin_sig)
+            panel_title = _domain_label(feat) if first_sex_row else ''
+            if window_sig is not None:
+                panel_title = f'{panel_title}\n{_window_sig_line(window_sig, feat, sex)}'.strip('\n')
+            ax.set_title(panel_title, fontsize=9)
+            ax.set_ylabel(f'{sex}\n{ylabel}' if (first_in_row and ylabel) else
+                           (sex if first_in_row else ''), fontsize=9)
+        axes = np.array([c[0] for c in cells])
+        _finish_category_figure(fig, axes, legend_loc, title, footnote=footnote)
+        if save_path:
+            os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+            fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
+        if show:
+            plt.show()
+        return fig, axes
 
     if pair_sexes:
         if len(sexes) != 2:
@@ -579,7 +751,8 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition', baseline_
                              session_order=('baseline', 'MDMA'), time_point_col='time_point',
                              day_col='day', window_col='time_window', gap=1.2, show_legend=True,
                              sex_suffix=None, value_suffix='', label_style=None,
-                             active_start_hour=12, session_labels=None, caption_loc='below'):
+                             active_start_hour=12, session_labels=None, caption_loc='below',
+                             bin_sig=None):
     """One feature's (or domain score's) FULL trajectory across BOTH sessions in a single panel:
     baseline days 1-3 on the left, a visual break at the treatment boundary, then post-injection
     (MDMA) days 1-3 on the right - same within-day (day, time_window) x-axis logic as
@@ -631,6 +804,9 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition', baseline_
     That makes this the SEPARATE-PANELS alternative to plot_temporal(baseline_as_reference=True) -
     same data, but baseline and post-treatment sit in two side-by-side blocks split by the
     treatment break instead of being overlaid, which reads better when the overlay gets busy.
+
+    bin_sig: optional per-bin test table, as in plot_temporal() - stars are drawn over the bins
+    of the post-treatment (last) block.
 
     Returns: ax
     """
@@ -723,7 +899,7 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition', baseline_
     # must NOT include tick_strip_pts again - it only has to clear the caption row (8pt text hung
     # 6pt below the strip), otherwise the axis label drifts far below the plot.
     ax.set_xlabel(axis_name + (', by day' if multi_day_axis else ''), fontsize=7.5,
-                  labelpad=17 if caption_loc == 'below' else 4)
+                  labelpad=26 if caption_loc == 'below' else 4)
 
     if caption_loc == 'below':
         block_captions = {**SESSION_BLOCK_LABELS, **(session_labels or {})}
@@ -732,9 +908,16 @@ def plot_session_trajectory(data, feature, sex, ax, group='condition', baseline_
                 continue
             ax.annotate(block_captions.get(sess, sess),
                         xy=((xs[0] + xs[-1]) / 2, 0), xycoords=('data', 'axes fraction'),
-                        xytext=(0, -(tick_strip_pts + 6)), textcoords='offset points',
+                        # + tick length/pad: the labels start that far below the axis, not at it
+                        xytext=(0, -(tick_strip_pts + ax.xaxis.get_tick_padding() + 8)),
+                        textcoords='offset points',
                         ha='center', va='top', fontsize=8, color=COLOR_INK, fontweight='bold')
     ax.axhline(0, color=COLOR_MUTED, lw=0.5, ls=':', zorder=0)
+    _mark_if_empty(ax, sub_sex[col] if col in sub_sex.columns else None)
+    if bin_sig is not None and blocks and blocks[-1][0] == session_order[-1]:
+        _, _, post_dw, post_xs = blocks[-1]
+        _annotate_bin_stars(ax, bin_sig, feature, sex, post_dw,
+                            day_col in bin_sig.columns, window_col, day_col, xs=post_xs)
     ax.set_title(_domain_label(feature), fontsize=10.5)
     if show_legend:
         handles, labels = ax.get_legend_handles_labels()
@@ -751,10 +934,15 @@ def plot_session_trajectory_grid(data, features, sexes, group='condition', basel
                                   max_cols=None, legend_loc='top', value_suffix='',
                                   label_style=None, active_start_hour=12, ylabel=None,
                                   session_labels=None, caption_loc='below', title=None,
-                                  save_path=None, show=True, dpi=150):
+                                  save_path=None, show=True, dpi=150, layout=None,
+                                  bin_sig=None, window_sig=None, footnote=None):
     """Grid of plot_session_trajectory() panels - the full baseline -> post-injection
     trajectory for each feature/domain in `features` - meant for CORE_DOMAIN_FEATURES-sized
     lists (12 domains) where one row would be unreadably wide.
+
+    layout: optional category grouping, as in plot_temporal_grid() - overrides max_cols/
+    pair_sexes. bin_sig / window_sig / footnote (layout mode only): significance marks, as in
+    plot_temporal_grid() - per-bin stars go over the post-treatment block.
 
     `sexes` - a single sex string (one row of panels, the original single-sex behavior) or
     a tuple of sexes. Domain scores are z-scored per sex (and the ELA color itself is
@@ -793,6 +981,36 @@ def plot_session_trajectory_grid(data, features, sexes, group='condition', basel
     sexes = [sexes] if isinstance(sexes, str) else list(sexes)
     n_feat = len(features)
     panel_w = 4.4
+    default_title = (f'{sexes[0]}: baseline -> post-injection domain-score trajectory'
+                      if len(sexes) == 1 else
+                      'Baseline -> post-injection domain-score trajectory, ' + ' vs '.join(sexes))
+
+    if layout is not None:
+        fig, cells = _category_figure(layout, features, sexes, panel_w, 3.6)
+        for ax, feat, sex, first_in_row, first_sex_row in cells:
+            plot_session_trajectory(data, feat, sex, ax, group=group,
+                                     baseline_group=baseline_group,
+                                     session_order=session_order, show_legend=False,
+                                     sex_suffix=sex if len(sexes) > 1 else None,
+                                     value_suffix=value_suffix, label_style=label_style,
+                                     active_start_hour=active_start_hour,
+                                     session_labels=session_labels, caption_loc=caption_loc,
+                                     bin_sig=bin_sig)
+            panel_title = f'{_domain_label(feat)}{title_suffix}' if first_sex_row else ''
+            if window_sig is not None:
+                panel_title = f'{panel_title}\n{_window_sig_line(window_sig, feat, sex)}'.strip('\n')
+            ax.set_title(panel_title, fontsize=9)
+            if first_in_row:
+                ax.set_ylabel(f'{sex}\n{ylabel}' if ylabel else
+                               (sex if len(sexes) > 1 else ''), fontsize=9)
+        axes = np.array([c[0] for c in cells])
+        _finish_category_figure(fig, axes, legend_loc, title or default_title, footnote=footnote)
+        if save_path:
+            os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+            fig.savefig(save_path, dpi=dpi, bbox_inches='tight')
+        if show:
+            plt.show()
+        return fig, axes
 
     if pair_sexes:
         if len(sexes) != 2:
@@ -862,9 +1080,6 @@ def plot_session_trajectory_grid(data, features, sexes, group='condition', basel
 
     top_pad, bottom_pad, title_y, legend_y = _legend_layout(legend_loc, title)
     plt.tight_layout(rect=(0, bottom_pad, 1, 1 - top_pad))
-    default_title = (f'{sexes[0]}: baseline -> post-injection domain-score trajectory'
-                      if len(sexes) == 1 else
-                      'Baseline -> post-injection domain-score trajectory, ' + ' vs '.join(sexes))
     fig.suptitle(title or default_title, color=COLOR_INK, fontsize=13, fontweight='bold', y=title_y)
     _draw_shared_legend(fig, axes.flatten(), legend_loc, legend_y)
 

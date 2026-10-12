@@ -66,11 +66,13 @@ Usage - import into run_analysis.py step 7 right after building `deltas` and `mo
     )
 """
 import os
+import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 import seaborn as sns
+from scipy import stats
 from statsmodels.stats.multitest import multipletests
 
 from aggregate import aggregate_to_mouse, box_paired_wide, mouse_level_deltas
@@ -1621,6 +1623,76 @@ def compute_posttx_window_mouse_sess(df_fine, domain_defs, id_cols, phase='activ
     mouse_win = compute_domain_scores(mouse_win, domain_defs=domain_defs,
                                        reference_mask=baseline_mask, group_col='__zgrp')
     return mouse_win
+
+
+def _mouse_treatment_test(sub, col, box_col='box_ID'):
+    """MDMA vs saline on one per-mouse delta column: Welch t (+ Mann-Whitney, Hedges g), plus a
+    mixed-model p (delta ~ treatment, random intercept = box) as a check on the mouse-level test,
+    since the mice of one background in a box share the cage and the treatment."""
+    d = sub[['treatment', box_col, col]].dropna()
+    a, b = d.loc[d.treatment == 'MDMA', col], d.loc[d.treatment == 'saline', col]
+    if len(a) < 3 or len(b) < 3:
+        return None
+    pooled_sd = np.sqrt(((len(a)-1)*a.var(ddof=1) + (len(b)-1)*b.var(ddof=1)) / (len(a)+len(b)-2))
+    g = (a.mean() - b.mean()) / pooled_sd if pooled_sd > 0 else np.nan
+    t, p = stats.ttest_ind(a, b, equal_var=False)
+    try:
+        _, p_mw = stats.mannwhitneyu(a, b, alternative='two-sided')
+    except ValueError:
+        p_mw = np.nan
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            fit = run_mixedlm(d, y_col=col, formula_rhs="C(treatment, Treatment('saline'))",
+                              group_col=box_col)
+        p_mm = fit.pvalues["C(treatment, Treatment('saline'))[T.MDMA]"]
+    except Exception:
+        p_mm = np.nan
+    return dict(n_MDMA=len(a), n_saline=len(b), mean_delta_MDMA=a.mean(),
+                mean_delta_saline=b.mean(), hedges_g=g, t=t, p=p, p_mannwhitney=p_mw,
+                p_mixedmodel_box=p_mm)
+
+
+def compute_posttx_mouse_stats(window_deltas, features, id_cols, bin_cols=None,
+                                sexes=('female', 'male'), backgrounds=('CTRL', 'ELA'),
+                                box_col='box_ID'):
+    """MDMA vs saline on each mouse's post-minus-baseline change, tested SEPARATELY within each
+    background (CTRL, ELA) - the Part-6 window statistics.
+
+    bin_cols=None: whole-window test - each mouse's delta is averaged over every bin (and day) of
+        the window first, so one value per mouse.
+    bin_cols=['time_window'] (or ['day', 'time_window']): one test per plotted bin - the values
+        behind the per-bin stars on the delta plots.
+
+    Unit = mouse (Welch t, Hedges g, Mann-Whitney p). p_mixedmodel_box repeats the comparison with
+    box as a random intercept, as a check. p_fdr: Benjamini-Hochberg across domains within each
+    sex x background (x bin, for per-bin tests).
+
+    Input: window_deltas - aggregate.mouse_level_deltas() output ('<feature>__delta' columns).
+    Returns tidy long table: sex, background, [bin cols], domain, n_MDMA, n_saline,
+    mean_delta_MDMA, mean_delta_saline, hedges_g, t, p, p_mannwhitney, p_mixedmodel_box, p_fdr.
+    """
+    features = [f for f in features if f'{f}__delta' in window_deltas.columns]
+    bin_cols = list(bin_cols or [])
+    combos = _ordered_combos(window_deltas, bin_cols) if bin_cols else [()]
+    rows = []
+    for combo in combos:
+        sub_bin = window_deltas[_combo_mask(window_deltas, bin_cols, combo)] if bin_cols else window_deltas
+        per_mouse = sub_bin.groupby(id_cols, as_index=False)[[f'{f}__delta' for f in features]].mean()
+        for sex in sexes:
+            for bg in backgrounds:
+                sub = per_mouse[(per_mouse.sex == sex) & (per_mouse.background == bg)]
+                block = []
+                for feat in features:
+                    res = _mouse_treatment_test(sub, f'{feat}__delta', box_col=box_col)
+                    if res:
+                        block.append(dict(sex=sex, background=bg, **dict(zip(bin_cols, combo)),
+                                          domain=feat, **res))
+                if block:
+                    block = pd.DataFrame(block)
+                    block['p_fdr'] = multipletests(block['p'], method='fdr_bh')[1]
+                    rows.append(block)
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
 def compute_epoch_interaction(mouse_sess_epoch, features, sexes=('female', 'male'),
